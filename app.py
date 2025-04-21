@@ -6,6 +6,8 @@ import os
 from dotenv import load_dotenv
 from models import get_db
 import datetime
+from models import init_db
+init_db()
 
 load_dotenv()
 
