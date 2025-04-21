@@ -193,11 +193,20 @@ def handle_message(event):
             return
         else:
             reply = "目前沒有餐廳資料。"
-    # --- 查詢餐廳菜單 ---
+    # --- 查詢餐廳菜單（分頁）---
     elif user_message.startswith("菜單"):
+        import re
         parts = user_message.split()
+        # 解析 page 參數
+        page = 1
+        page_match = re.search(r'page=(\d+)', user_message)
+        if page_match:
+            page = int(page_match.group(1))
+            # 移除 page=... 參數
+            parts = [p for p in parts if not p.startswith('page=')]
+        PAGE_SIZE = 11
         if len(parts) == 3:
-            # 處理「菜單 餐廳名稱 分類名稱」→ 顯示該分類下所有品項 Quick Reply
+            # 「菜單 餐廳名稱 分類名稱」分頁顯示品項
             restaurant_name = parts[1]
             category_name = parts[2]
             c.execute('SELECT id FROM restaurant WHERE name=?', (restaurant_name,))
@@ -217,21 +226,29 @@ def handle_message(event):
                     if not items:
                         reply = f"{restaurant_name}【{category_name}】尚無品項。"
                     else:
+                        start = (page-1)*PAGE_SIZE
+                        end = start+PAGE_SIZE
+                        page_items = items[start:end]
                         quick_reply_items = [
                             QuickReplyButton(action=MessageAction(label=f"{item[0]} ${item[1]}", text=f"點餐 {item[0]} 1"))
-                            for item in items
+                            for item in page_items
                         ]
+                        # 加入下一頁按鈕
+                        if end < len(items):
+                            quick_reply_items.append(
+                                QuickReplyButton(action=MessageAction(label="下一頁", text=f"菜單 {restaurant_name} {category_name} page={page+1}"))
+                            )
                         line_bot_api.reply_message(
                             event.reply_token,
                             TextSendMessage(
-                                text=f"請選擇 {restaurant_name}【{category_name}】的品項：",
+                                text=f"請選擇 {restaurant_name}【{category_name}】的品項（第{page}頁）：",
                                 quick_reply=QuickReply(items=quick_reply_items)
                             )
                         )
                         conn.close()
                         return
         elif len(parts) == 2:
-            # 處理「菜單 餐廳名稱」→ 顯示分類 Quick Reply
+            # 「菜單 餐廳名稱」分頁顯示分類
             restaurant_name = parts[1]
             c.execute('SELECT id FROM restaurant WHERE name=?', (restaurant_name,))
             r = c.fetchone()
@@ -244,14 +261,22 @@ def handle_message(event):
                 if not categories:
                     reply = f"{restaurant_name} 尚無菜單資料。"
                 else:
+                    start = (page-1)*PAGE_SIZE
+                    end = start+PAGE_SIZE
+                    page_cats = categories[start:end]
                     quick_reply_items = [
                         QuickReplyButton(action=MessageAction(label=cat[0], text=f"菜單 {restaurant_name} {cat[0]}"))
-                        for cat in categories
+                        for cat in page_cats
                     ]
+                    # 加入下一頁按鈕
+                    if end < len(categories):
+                        quick_reply_items.append(
+                            QuickReplyButton(action=MessageAction(label="下一頁", text=f"菜單 {restaurant_name} page={page+1}"))
+                        )
                     line_bot_api.reply_message(
                         event.reply_token,
                         TextSendMessage(
-                            text=f"請選擇 {restaurant_name} 的分類：",
+                            text=f"請選擇 {restaurant_name} 的分類（第{page}頁）：",
                             quick_reply=QuickReply(items=quick_reply_items)
                         )
                     )
