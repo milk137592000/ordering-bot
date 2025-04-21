@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 from models import get_db
 import datetime
+from import_menu import import_to_db, parse_menu
 
 load_dotenv()
 
@@ -328,6 +329,28 @@ def handle_message(event):
         event.reply_token,
         TextSendMessage(text=reply)
     )
+
+def is_db_empty(db_path):
+    import sqlite3
+    if not os.path.exists(db_path):
+        return True
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    try:
+        c.execute('SELECT COUNT(*) FROM restaurant')
+        count = c.fetchone()[0]
+        conn.close()
+        return count == 0
+    except Exception:
+        conn.close()
+        return True
+
+# 啟動時自動匯入 menu.md 和 drink.md
+if is_db_empty('db2.sqlite3'):
+    print('資料庫為空，自動匯入 menu.md ...')
+    import_to_db(parse_menu())
+    print('menu.md 已自動匯入資料庫！')
+    # 若有 drink.md 也要匯入，請在 import_menu.py 增加支援或複製一份 import_menu.py 處理 drink.md
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000) 
