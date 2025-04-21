@@ -1,7 +1,4 @@
 Flask
 line-bot-sdk
-python-dotenv 
+python-dotenv
 gunicorn
-
-from models import init_db
-init_db()
