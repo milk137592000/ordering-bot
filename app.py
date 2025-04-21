@@ -47,7 +47,7 @@ def handle_message(event):
     conn = get_db()
     c = conn.cursor()
     # --- 設定今日餐廳（需指定餐別）---
-    if user_message.startswith("今日餐廳"):
+    if user_message.startswith("今日餐廳") or user_message.startswith("吃"):
         parts = user_message.split()
         if len(parts) >= 3:
             restaurant_name = parts[1]
@@ -284,6 +284,45 @@ def handle_message(event):
                     return
         else:
             reply = "請輸入：菜單 餐廳名稱"
+    # --- 隨機選擇今日餐廳 ---
+    elif user_message.startswith("隨便吃"):
+        parts = user_message.split()
+        if len(parts) == 2 and parts[1] in ["中餐", "午餐", "晚餐"]:
+            meal_type = parts[1]
+            if meal_type == "午餐":
+                meal_type = "中餐"
+            c.execute('SELECT id, name FROM restaurant ORDER BY RANDOM() LIMIT 1')
+            r = c.fetchone()
+            if not r:
+                reply = "目前沒有餐廳資料。"
+            else:
+                restaurant_id, restaurant_name = r
+                today = datetime.date.today().isoformat()
+                c.execute('INSERT OR REPLACE INTO today_restaurant (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
+                conn.commit()
+                reply = f"今日{meal_type}已隨機選擇：{restaurant_name}"
+        else:
+            reply = "請輸入：隨便吃 午餐/晚餐"
+    # --- 飲料店下拉式選單 ---
+    elif user_message == "飲料":
+        c.execute("SELECT name FROM restaurant WHERE name LIKE '%飲料%' OR name LIKE '%茶%' OR name LIKE '%春色%' OR name LIKE '%清原%' OR name LIKE '%得正%'")
+        rows = c.fetchall()
+        if rows:
+            quick_reply_items = [
+                QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
+                for row in rows
+            ]
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text="請選擇飲料店：",
+                    quick_reply=QuickReply(items=quick_reply_items)
+                )
+            )
+            conn.close()
+            return
+        else:
+            reply = "目前沒有飲料店資料。"
     else:
         reply = f"你說了：{user_message}"
     conn.close()
