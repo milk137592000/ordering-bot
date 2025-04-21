@@ -1,7 +1,7 @@
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
 import os
 from dotenv import load_dotenv
 from models import get_db
@@ -178,7 +178,19 @@ def handle_message(event):
         c.execute('SELECT name FROM restaurant ORDER BY id')
         rows = c.fetchall()
         if rows:
-            reply = "餐廳清單：\n" + "\n".join([row[0] for row in rows])
+            quick_reply_items = [
+                QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
+                for row in rows
+            ]
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text="請選擇餐廳：",
+                    quick_reply=QuickReply(items=quick_reply_items)
+                )
+            )
+            conn.close()
+            return
         else:
             reply = "目前沒有餐廳資料。"
     # --- 查詢餐廳菜單 ---
