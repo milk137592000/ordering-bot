@@ -197,7 +197,7 @@ def handle_message(event):
     elif user_message.startswith("菜單"):
         parts = user_message.split()
         if len(parts) == 3:
-            # 處理「菜單 餐廳名稱 分類名稱」→ 顯示該分類下所有品項
+            # 處理「菜單 餐廳名稱 分類名稱」→ 顯示該分類下所有品項 Quick Reply
             restaurant_name = parts[1]
             category_name = parts[2]
             c.execute('SELECT id FROM restaurant WHERE name=?', (restaurant_name,))
@@ -217,10 +217,19 @@ def handle_message(event):
                     if not items:
                         reply = f"{restaurant_name}【{category_name}】尚無品項。"
                     else:
-                        menu_lines = [f"{restaurant_name}【{category_name}】菜單："]
-                        for item in items:
-                            menu_lines.append(f"- {item[0]} ${item[1]}")
-                        reply = "\n".join(menu_lines)
+                        quick_reply_items = [
+                            QuickReplyButton(action=MessageAction(label=f"{item[0]} ${item[1]}", text=f"點餐 {item[0]} 1"))
+                            for item in items
+                        ]
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text=f"請選擇 {restaurant_name}【{category_name}】的品項：",
+                                quick_reply=QuickReply(items=quick_reply_items)
+                            )
+                        )
+                        conn.close()
+                        return
         elif len(parts) == 2:
             # 處理「菜單 餐廳名稱」→ 顯示分類 Quick Reply
             restaurant_name = parts[1]
