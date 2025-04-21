@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from models import get_db
 import datetime
 from import_menu import import_to_db, parse_menu
+from import_drink_menu import import_to_db as import_drink_to_db, parse_menu as parse_drink_menu
 
 load_dotenv()
 
@@ -350,7 +351,9 @@ if is_db_empty('db2.sqlite3'):
     print('資料庫為空，自動匯入 menu.md ...')
     import_to_db(parse_menu())
     print('menu.md 已自動匯入資料庫！')
-    # 若有 drink.md 也要匯入，請在 import_menu.py 增加支援或複製一份 import_menu.py 處理 drink.md
+    print('自動匯入 drink.md ...')
+    import_drink_to_db(parse_drink_menu())
+    print('drink.md 已自動匯入資料庫！')
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000) 
