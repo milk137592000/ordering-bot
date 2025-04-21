@@ -196,7 +196,33 @@ def handle_message(event):
     # --- 查詢餐廳菜單 ---
     elif user_message.startswith("菜單"):
         parts = user_message.split()
-        if len(parts) >= 2:
+        if len(parts) == 3:
+            # 處理「菜單 餐廳名稱 分類名稱」→ 顯示該分類下所有品項
+            restaurant_name = parts[1]
+            category_name = parts[2]
+            c.execute('SELECT id FROM restaurant WHERE name=?', (restaurant_name,))
+            r = c.fetchone()
+            if not r:
+                reply = f"找不到餐廳：{restaurant_name}"
+            else:
+                restaurant_id = r[0]
+                c.execute('SELECT id FROM menu_category WHERE restaurant_id=? AND name=?', (restaurant_id, category_name))
+                cat = c.fetchone()
+                if not cat:
+                    reply = f"找不到分類：{category_name}"
+                else:
+                    category_id = cat[0]
+                    c.execute('SELECT name, price FROM menu_item WHERE category_id=?', (category_id,))
+                    items = c.fetchall()
+                    if not items:
+                        reply = f"{restaurant_name}【{category_name}】尚無品項。"
+                    else:
+                        menu_lines = [f"{restaurant_name}【{category_name}】菜單："]
+                        for item in items:
+                            menu_lines.append(f"- {item[0]} ${item[1]}")
+                        reply = "\n".join(menu_lines)
+        elif len(parts) == 2:
+            # 處理「菜單 餐廳名稱」→ 顯示分類 Quick Reply
             restaurant_name = parts[1]
             c.execute('SELECT id FROM restaurant WHERE name=?', (restaurant_name,))
             r = c.fetchone()
@@ -204,19 +230,24 @@ def handle_message(event):
                 reply = f"找不到餐廳：{restaurant_name}"
             else:
                 restaurant_id = r[0]
-                c.execute('SELECT id, name FROM menu_category WHERE restaurant_id=?', (restaurant_id,))
+                c.execute('SELECT name FROM menu_category WHERE restaurant_id=?', (restaurant_id,))
                 categories = c.fetchall()
                 if not categories:
                     reply = f"{restaurant_name} 尚無菜單資料。"
                 else:
-                    menu_lines = [f"{restaurant_name} 菜單："]
-                    for cat in categories:
-                        menu_lines.append(f"【{cat[1]}】")
-                        c.execute('SELECT name, price FROM menu_item WHERE category_id=?', (cat[0],))
-                        items = c.fetchall()
-                        for item in items:
-                            menu_lines.append(f"- {item[0]} ${item[1]}")
-                    reply = "\n".join(menu_lines)
+                    quick_reply_items = [
+                        QuickReplyButton(action=MessageAction(label=cat[0], text=f"菜單 {restaurant_name} {cat[0]}"))
+                        for cat in categories
+                    ]
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(
+                            text=f"請選擇 {restaurant_name} 的分類：",
+                            quick_reply=QuickReply(items=quick_reply_items)
+                        )
+                    )
+                    conn.close()
+                    return
         else:
             reply = "請輸入：菜單 餐廳名稱"
     else:
