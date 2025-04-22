@@ -122,12 +122,12 @@ def handle_message(event):
                     if len(parts) == 2:
                         item_name = parts[1]
                         quick_reply_items = [
-                            QuickReplyButton(action=MessageAction(label=f"甜度{i}", text=f"點餐 {item_name} 甜度{i}")) for i in range(0, 11)
+                            QuickReplyButton(action=MessageAction(label=f"{s}", text=f"點餐 {item_name} 甜度{s}")) for s in ["正常", "少糖", "半糖", "微糖", "無糖"]
                         ]
                         line_bot_api.reply_message(
                             event.reply_token,
                             TextSendMessage(
-                                text="請選擇甜度（0~10）",
+                                text="請選擇甜度",
                                 quick_reply=QuickReply(items=quick_reply_items)
                             )
                         )
@@ -218,7 +218,7 @@ def handle_message(event):
                         line_bot_api.reply_message(
                             event.reply_token,
                             TextSendMessage(
-                                text="要幾份？",
+                                text="請選擇份數（1~5）",
                                 quick_reply=QuickReply(items=quick_reply_items)
                             )
                         )
@@ -385,7 +385,7 @@ def handle_message(event):
                             QuickReplyButton(
                                 action=MessageAction(
                                     label=safe_label(f"{item[0]} ${item[1]}"),
-                                    text=f"點餐 {item[0]}" if is_drink_shop else f"點餐 {item[0]} 1"
+                                    text=f"點餐 {item[0]}" if is_drink_shop else f"點餐 {item[0]}"
                                 )
                             )
                             for item in page_items

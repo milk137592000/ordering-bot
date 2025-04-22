@@ -13,8 +13,8 @@ def parse_menu():
     current_category = None
     for line in lines:
         line = line.strip()
-        if line.startswith('# ') and '餐廳菜單' in line:
-            current_restaurant = line.replace('# ', '').replace(' 餐廳菜單', '').strip()
+        if line.startswith('# ') and ('餐廳菜單' in line or ' 菜單' in line):
+            current_restaurant = line.replace('# ', '').replace(' 餐廳菜單', '').replace(' 菜單', '').strip()
             restaurants.append({'name': current_restaurant, 'categories': []})
         elif line.startswith('## '):
             current_category = line.replace('## ', '').strip()
@@ -34,6 +34,10 @@ def import_to_db(restaurants):
     conn = get_db()
     c = conn.cursor()
     for r in restaurants:
+        # 先刪除舊資料
+        c.execute('DELETE FROM menu_item WHERE category_id IN (SELECT id FROM menu_category WHERE restaurant_id IN (SELECT id FROM restaurant WHERE name=?))', (r['name'],))
+        c.execute('DELETE FROM menu_category WHERE restaurant_id IN (SELECT id FROM restaurant WHERE name=?)', (r['name'],))
+        c.execute('DELETE FROM restaurant WHERE name=?', (r['name'],))
         # 新增餐廳
         c.execute('INSERT OR IGNORE INTO restaurant (name) VALUES (?)', (r['name'],))
         c.execute('SELECT id FROM restaurant WHERE name=?', (r['name'],))
