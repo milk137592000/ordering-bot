@@ -351,6 +351,75 @@ def handle_message(event):
                     else:
                         reply = "請輸入：點餐 品項 數量（例如：點餐 招牌雞腿便當 2）"
 
+    # --- 今日午餐/晚餐統計 ---
+    elif user_message.strip() in ["今日午餐統計", "今日晚餐統計"]:
+        meal_type = "中餐" if "午餐" in user_message else "晚餐"
+        today = datetime.date.today().isoformat()
+        # 查詢所有今日餐廳與飲料店
+        c.execute('SELECT id, name FROM restaurant')
+        all_restaurants = c.fetchall()
+        food_ids = []
+        drink_ids = []
+        for rid, name in all_restaurants:
+            if is_drink_shop_name(name):
+                drink_ids.append(rid)
+            else:
+                food_ids.append(rid)
+        lines = []
+        total_sum = 0
+        # 餐點
+        lines.append("【餐點】")
+        found_food = False
+        for rid in food_ids:
+            c.execute('''SELECT u.display_name, mi.name, orr.quantity, mi.price, (orr.quantity * mi.price) as total\n                         FROM order_record orr\n                         JOIN user u ON orr.user_id = u.id\n                         JOIN menu_item mi ON orr.menu_item_id = mi.id\n                         JOIN menu_category mc ON mi.category_id = mc.id\n                         WHERE orr.date=? AND orr.meal_type=? AND mc.restaurant_id=?\n                         ORDER BY u.display_name''', (today, meal_type, rid))
+            rows = c.fetchall()
+            if not rows:
+                continue
+            found_food = True
+            summary = {}
+            for row in rows:
+                name = row[0] or "(未知)"
+                item = row[1]
+                qty = row[2]
+                price = row[3]
+                subtotal = row[4]
+                total_sum += subtotal
+                if name not in summary:
+                    summary[name] = []
+                summary[name].append(f"{item} x{qty} = ${subtotal}")
+            for name, items in summary.items():
+                lines.append(f"{name}：")
+                lines.extend([f"  {i}" for i in items])
+        if not found_food:
+            lines.append("(無餐點紀錄)")
+        # 飲料
+        lines.append("\n【飲料】")
+        found_drink = False
+        for rid in drink_ids:
+            c.execute('''SELECT u.display_name, mi.name, orr.quantity, mi.price, (orr.quantity * mi.price) as total\n                         FROM order_record orr\n                         JOIN user u ON orr.user_id = u.id\n                         JOIN menu_item mi ON orr.menu_item_id = mi.id\n                         JOIN menu_category mc ON mi.category_id = mc.id\n                         WHERE orr.date=? AND orr.meal_type=? AND mc.restaurant_id=?\n                         ORDER BY u.display_name''', (today, meal_type, rid))
+            rows = c.fetchall()
+            if not rows:
+                continue
+            found_drink = True
+            summary = {}
+            for row in rows:
+                name = row[0] or "(未知)"
+                item = row[1]
+                qty = row[2]
+                price = row[3]
+                subtotal = row[4]
+                total_sum += subtotal
+                if name not in summary:
+                    summary[name] = []
+                summary[name].append(f"{item} x{qty} = ${subtotal}")
+            for name, items in summary.items():
+                lines.append(f"{name}：")
+                lines.extend([f"  {i}" for i in items])
+        if not found_drink:
+            lines.append("(無飲料紀錄)")
+        lines.append(f"\n總金額：${total_sum}")
+        reply = "\n".join(lines)
+
     # --- 餐點/飲料 統計 ---
     elif user_message.strip() in ["餐點 統計", "飲料 統計"]:
         is_drink = user_message.strip().startswith("飲料")
@@ -577,6 +646,9 @@ def handle_message(event):
                 reply = f"今日{meal_type}已隨機選擇飲料店：{restaurant_name}"
         else:
             reply = "請輸入：隨便喝 午餐/晚餐"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+        conn.close()
+        return
 
     # --- 飲料店下拉式選單（分頁） ---
     elif user_message.startswith("飲料") or user_message == "飲料":
