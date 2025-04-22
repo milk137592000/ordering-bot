@@ -199,26 +199,56 @@ def handle_message(event):
                 reply = f"{meal_type}點餐已截止。"
             else:
                 parts = user_message.split()
-                # 先查今日餐廳
-                c.execute('SELECT r.name FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, meal_type))
+                # 查今日餐廳與飲料店
+                c.execute('SELECT r.name, r.id FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, meal_type))
                 today_restaurant_row = c.fetchone()
                 today_restaurant = today_restaurant_row[0] if today_restaurant_row else None
-                # 再查今日飲料店
-                c.execute('SELECT r.name FROM today_drink td JOIN restaurant r ON td.restaurant_id = r.id WHERE td.date=? AND td.meal_type=?', (today, meal_type))
+                today_restaurant_id = today_restaurant_row[1] if today_restaurant_row else None
+                c.execute('SELECT r.name, r.id FROM today_drink td JOIN restaurant r ON td.restaurant_id = r.id WHERE td.date=? AND td.meal_type=?', (today, meal_type))
                 today_drink_row = c.fetchone()
                 today_drink = today_drink_row[0] if today_drink_row else None
-                # 只要有今日餐廳就走餐廳互動流程，否則才走飲料店互動流程
-                if today_restaurant:
-                    is_drink_shop = False
-                    current_shop = today_restaurant
-                elif today_drink:
-                    is_drink_shop = True
-                    current_shop = today_drink
+                today_drink_id = today_drink_row[1] if today_drink_row else None
+                # 只有「點餐 品項」時才需要自動判斷
+                if len(parts) >= 2:
+                    item_name = parts[1]
+                    # 先查餐廳菜單
+                    found_in_restaurant = False
+                    found_in_drink = False
+                    if today_restaurant_id:
+                        c.execute('''SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, today_restaurant_id))
+                        found_in_restaurant = c.fetchone() is not None
+                    if not found_in_restaurant and today_drink_id:
+                        c.execute('''SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, today_drink_id))
+                        found_in_drink = c.fetchone() is not None
+                    # 根據品項決定流程
+                    if found_in_restaurant:
+                        is_drink_shop = False
+                        current_shop = today_restaurant
+                        current_shop_id = today_restaurant_id
+                    elif found_in_drink:
+                        is_drink_shop = True
+                        current_shop = today_drink
+                        current_shop_id = today_drink_id
+                    else:
+                        reply = f"找不到品項：{item_name}"
+                        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+                        conn.close()
+                        return
                 else:
-                    reply = f"請先設定今日{meal_type}餐廳或飲料店。"
-                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-                    conn.close()
-                    return
+                    # 沒有指定品項時，預設優先餐廳
+                    if today_restaurant:
+                        is_drink_shop = False
+                        current_shop = today_restaurant
+                        current_shop_id = today_restaurant_id
+                    elif today_drink:
+                        is_drink_shop = True
+                        current_shop = today_drink
+                        current_shop_id = today_drink_id
+                    else:
+                        reply = f"請先設定今日{meal_type}餐廳或飲料店。"
+                        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+                        conn.close()
+                        return
                 # 飲料店互動流程
                 if is_drink_shop:
                     # 1. 選品項，詢問甜度
