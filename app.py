@@ -88,12 +88,12 @@ def handle_message(event):
                 reply = f"{meal_type}點餐已截止。"
             else:
                 parts = user_message.split()
-                drink_shops = ["鶴茶樓", "50嵐", "麻古飲料店", "水巷茶弄", "三分春色", "清原", "得正"]
                 c.execute('SELECT r.name FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, meal_type))
                 today_restaurant_row = c.fetchone()
                 today_restaurant = today_restaurant_row[0] if today_restaurant_row else None
-                # 飲料店互動流程
-                if today_restaurant in drink_shops:
+                # 飲料店互動流程（名稱只要包含關鍵字即可）
+                is_drink_shop = is_drink_shop_name(today_restaurant) if today_restaurant else False
+                if is_drink_shop:
                     # 1. 選品項，詢問甜度
                     if len(parts) == 2:
                         item_name = parts[1]
@@ -355,7 +355,7 @@ def handle_message(event):
                     else:
                         start = (page-1)*PAGE_SIZE
                         end = start+PAGE_SIZE
-                        is_drink_shop = any(x in restaurant_name for x in ["飲料", "茶", "春色", "清原", "得正", "麻古", "50嵐", "鶴茶樓", "水巷茶弄"])
+                        is_drink_shop = is_drink_shop_name(restaurant_name)
                         page_items = items[start:end]
                         quick_reply_items = [
                             QuickReplyButton(
@@ -611,5 +611,12 @@ if is_db_empty('db2.sqlite3'):
     import_drink_to_db(parse_drink_menu())
     print('drink.md 已自動匯入資料庫！')
 
+# 新增：飲料店判斷 function
+def is_drink_shop_name(name):
+    drink_shops = ["飲料", "茶", "春色", "清原", "得正", "麻古", "50嵐", "鶴茶樓", "水巷茶弄"]
+    return any(x in name for x in drink_shops)
+
 if __name__ == "__main__":
+    import_to_db(parse_menu())
+    import_drink_to_db(parse_drink_menu())
     app.run(host='0.0.0.0', port=5000) 
