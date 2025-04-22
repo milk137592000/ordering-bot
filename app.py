@@ -70,61 +70,46 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
             conn.close()
             return
-        # 判斷是否為飲料店
-        if is_drink_shop_name(restaurant_name):
-            reply = f"今日{meal_type}已設定為飲料店：{restaurant_name}，請用『喝啥』查詢飲料菜單。"
+        # 直接顯示菜單
+        c.execute('SELECT name FROM menu_category WHERE restaurant_id=(SELECT id FROM restaurant WHERE name=?)', (restaurant_name,))
+        categories = c.fetchall()
+        if not categories:
+            reply = f"{restaurant_name} 尚無菜單資料。"
         else:
-            # 直接顯示菜單
-            c.execute('SELECT name FROM menu_category WHERE restaurant_id=(SELECT id FROM restaurant WHERE name=?)', (restaurant_name,))
-            categories = c.fetchall()
-            if not categories:
-                reply = f"{restaurant_name} 尚無菜單資料。"
-            else:
-                quick_reply_items = [
-                    QuickReplyButton(action=MessageAction(label=safe_label(cat[0]), text=f"菜單 {restaurant_name} {cat[0]}"))
-                    for cat in categories
-                ]
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(
-                        text=f"請選擇 {restaurant_name} 的分類：",
-                        quick_reply=QuickReply(items=quick_reply_items)
-                    )
+            quick_reply_items = [
+                QuickReplyButton(action=MessageAction(label=safe_label(cat[0]), text=f"菜單 {restaurant_name} {cat[0]}"))
+                for cat in categories
+            ]
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text=f"請選擇 {restaurant_name} 的分類：",
+                    quick_reply=QuickReply(items=quick_reply_items)
                 )
-                conn.close()
-                return
+            )
+            conn.close()
+            return
 
     # --- 喝啥：直接顯示今日飲料店菜單 ---
     elif user_message.strip() == "喝啥":
         today = datetime.date.today().isoformat()
-        now = datetime.datetime.now().time()
-        
-        # 檢查今日晚餐是否已設定飲料店
-        c.execute('SELECT r.name FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, "晚餐"))
-        evening_row = c.fetchone()
-        
-        # 檢查今日中餐是否已設定飲料店
-        c.execute('SELECT r.name FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, "中餐"))
+        # 先查晚餐
+        c.execute('SELECT r.name FROM today_drink td JOIN restaurant r ON td.restaurant_id = r.id WHERE td.date=? AND td.meal_type=?', (today, "晚餐"))
+        dinner_row = c.fetchone()
+        # 再查中餐
+        c.execute('SELECT r.name FROM today_drink td JOIN restaurant r ON td.restaurant_id = r.id WHERE td.date=? AND td.meal_type=?', (today, "中餐"))
         lunch_row = c.fetchone()
-        
-        # 優先顯示晚餐飲料店，如果晚餐未設定則顯示中餐飲料店
-        if evening_row and is_drink_shop_name(evening_row[0]):
-            restaurant_name = evening_row[0]
+        if dinner_row:
+            restaurant_name = dinner_row[0]
             meal_type = "晚餐"
-        elif lunch_row and is_drink_shop_name(lunch_row[0]):
+        elif lunch_row:
             restaurant_name = lunch_row[0]
             meal_type = "中餐"
         else:
-            # 根據時間判斷顯示哪個餐別的提示
-            if now < datetime.time(9, 0):
-                meal_type = "中餐"
-            else:
-                meal_type = "晚餐"
-            reply = f"今日{meal_type}尚未設定飲料店。"
+            reply = "今日尚未設定飲料店。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
             conn.close()
             return
-            
         # 直接顯示菜單
         c.execute('SELECT name FROM menu_category WHERE restaurant_id=(SELECT id FROM restaurant WHERE name=?)', (restaurant_name,))
         categories = c.fetchall()
@@ -160,9 +145,13 @@ def handle_message(event):
                     reply = f"找不到餐廳：{restaurant_name}"
                 else:
                     restaurant_id = r[0]
-                    c.execute('INSERT OR REPLACE INTO today_restaurant (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
-                    conn.commit()
-                    reply = f"今日{meal_type}已設定為：{restaurant_name}"
+                    # 僅允許非飲料店
+                    if is_drink_shop_name(restaurant_name):
+                        reply = f"{restaurant_name} 是飲料店，請用『今日飲料』設定飲料店。"
+                    else:
+                        c.execute('INSERT OR REPLACE INTO today_restaurant (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
+                        conn.commit()
+                        reply = f"今日{meal_type}已設定為：{restaurant_name}"
         else:
             reply = "請輸入：今日餐廳 餐廳名稱 中餐/晚餐"
 
@@ -180,14 +169,14 @@ def handle_message(event):
                 if not r:
                     reply = f"找不到飲料店：{drink_shop_name}"
                 else:
-                    # 確認是否為飲料店
+                    # 僅允許飲料店
                     if is_drink_shop_name(drink_shop_name):
                         restaurant_id = r[0]
-                        c.execute('INSERT OR REPLACE INTO today_restaurant (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
+                        c.execute('INSERT OR REPLACE INTO today_drink (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
                         conn.commit()
-                        reply = f"今日{meal_type}是{drink_shop_name}飲料店"
+                        reply = f"今日{meal_type}已設定為飲料店：{drink_shop_name}"
                     else:
-                        reply = f"{drink_shop_name} 不是飲料店，請使用「今日餐廳」指令設定一般餐廳"
+                        reply = f"{drink_shop_name} 不是飲料店，請用『今日餐廳』設定一般餐廳"
         else:
             reply = "請輸入：今日飲料 飲料店名稱 中餐/晚餐"
 
@@ -583,7 +572,7 @@ def handle_message(event):
             else:
                 restaurant_id, restaurant_name = r
                 today = datetime.date.today().isoformat()
-                c.execute('INSERT OR REPLACE INTO today_restaurant (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
+                c.execute('INSERT OR REPLACE INTO today_drink (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
                 conn.commit()
                 reply = f"今日{meal_type}已隨機選擇飲料店：{restaurant_name}"
         else:

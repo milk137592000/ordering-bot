@@ -56,6 +56,17 @@ def init_db():
             FOREIGN KEY (restaurant_id) REFERENCES restaurant(id)
         )
     ''')
+    # 今日飲料店表
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS today_drink (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            meal_type TEXT NOT NULL, -- '中餐' 或 '晚餐'
+            restaurant_id INTEGER NOT NULL,
+            UNIQUE(date, meal_type),
+            FOREIGN KEY (restaurant_id) REFERENCES restaurant(id)
+        )
+    ''')
     # 點餐紀錄表
     c.execute('''
         CREATE TABLE IF NOT EXISTS order_record (
