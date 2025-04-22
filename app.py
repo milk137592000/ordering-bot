@@ -723,6 +723,38 @@ def handle_message(event):
         else:
             reply = "目前沒有飲料店資料。"
 
+    # --- 今日消費明細 ---
+    elif user_message.strip() == "今日消費明細":
+        today = datetime.date.today().isoformat()
+        # 判斷目前是哪一餐
+        if now < datetime.time(9, 0):
+            meal_type = "中餐"
+        elif now < datetime.time(17, 0):
+            meal_type = "晚餐"
+        else:
+            meal_type = "晚餐"
+        # 查詢所有點餐紀錄（餐點+飲料）
+        c.execute('''SELECT u.display_name, SUM(orr.quantity * mi.price) as total
+                     FROM order_record orr
+                     JOIN user u ON orr.user_id = u.id
+                     JOIN menu_item mi ON orr.menu_item_id = mi.id
+                     JOIN menu_category mc ON mi.category_id = mc.id
+                     WHERE orr.date=? AND orr.meal_type=?
+                     GROUP BY u.display_name''', (today, meal_type))
+        rows = c.fetchall()
+        lines = [f"今日{meal_type}消費明細："]
+        total_sum = 0
+        if rows:
+            for row in rows:
+                name = row[0] or "(未知)"
+                subtotal = row[1]
+                total_sum += subtotal
+                lines.append(f"{name}：${subtotal}")
+            lines.append(f"總金額：${total_sum}")
+        else:
+            lines.append("今日尚無點餐紀錄。")
+        reply = "\n".join(lines)
+
     else: # 所有其他指令都落到這裡
         reply = f"無法識別指令：{user_message}"
 
