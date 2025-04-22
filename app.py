@@ -492,7 +492,13 @@ def handle_message(event):
     elif user_message.strip() == "喝啥":
         today = datetime.date.today().isoformat()
         now = datetime.datetime.now().time()
-        meal_type = "中餐" if now < datetime.time(17, 0) else "晚餐"
+        meal_type = None
+        if now < datetime.time(9, 0):
+            meal_type = "中餐"
+        elif now < datetime.time(17, 0):
+            meal_type = "中餐"
+        else:
+            meal_type = "晚餐"
         c.execute('SELECT r.name FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, meal_type))
         row = c.fetchone()
         if not row:
@@ -527,7 +533,13 @@ def handle_message(event):
     elif user_message.strip() == "吃啥":
         today = datetime.date.today().isoformat()
         now = datetime.datetime.now().time()
-        meal_type = "中餐" if now < datetime.time(17, 0) else "晚餐"
+        meal_type = None
+        if now < datetime.time(9, 0):
+            meal_type = "中餐"
+        elif now < datetime.time(17, 0):
+            meal_type = "中餐"
+        else:
+            meal_type = "晚餐"
         c.execute('SELECT r.name FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, meal_type))
         row = c.fetchone()
         if not row:
