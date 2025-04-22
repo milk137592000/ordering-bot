@@ -579,9 +579,10 @@ def handle_message(event):
             reply = f"今日{meal_type}尚未設定餐廳。"
         else:
             restaurant_name = row[0]
-            # 判斷是否為餐廳（非飲料店）
-            if not any(x in restaurant_name for x in ["飲料", "茶", "春色", "清原", "得正", "麻古", "50嵐", "鶴茶樓", "水巷茶弄"]):
-                reply = None
+            # 判斷是否為飲料店
+            if is_drink_shop_name(restaurant_name):
+                reply = f"今日{meal_type}已設定為飲料店：{restaurant_name}，請用『喝啥』查詢飲料菜單。"
+            else:
                 # 直接顯示菜單
                 c.execute('SELECT name FROM menu_category WHERE restaurant_id=(SELECT id FROM restaurant WHERE name=?)', (restaurant_name,))
                 categories = c.fetchall()
@@ -601,8 +602,6 @@ def handle_message(event):
                     )
                     conn.close()
                     return
-            else:
-                reply = f"今日{meal_type}尚未設定餐廳。"
     else:
         reply = f"你說了：{user_message}"
     conn.close()
