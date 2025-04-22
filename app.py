@@ -235,13 +235,14 @@ def handle_message(event):
                     elif len(parts) == 3 and parts[2].startswith("甜度"):
                         item_name = parts[1]
                         sweetness = parts[2]
+                        ice_options = ["正常", "少冰", "微冰", "去冰"]
                         quick_reply_items = [
-                            QuickReplyButton(action=MessageAction(label=f"冰塊{i}", text=f"點餐 {item_name} {sweetness} 冰塊{i}")) for i in range(0, 11)
+                            QuickReplyButton(action=MessageAction(label=f"冰塊{opt}", text=f"點餐 {item_name} {sweetness} 冰塊{opt}")) for opt in ice_options
                         ]
                         line_bot_api.reply_message(
                             event.reply_token,
                             TextSendMessage(
-                                text="請選擇冰塊（0~10）",
+                                text="請選擇冰塊（正常/少冰/微冰/去冰）",
                                 quick_reply=QuickReply(items=quick_reply_items)
                             )
                         )
@@ -361,41 +362,45 @@ def handle_message(event):
                     else:
                         reply = "請輸入：點餐 品項 數量（例如：點餐 招牌雞腿便當 2）"
 
-    # --- 統計（可指定餐別）---
-    elif user_message.startswith("統計"):
-        parts = user_message.split()
-        if len(parts) == 2 and parts[1] in ["中餐", "晚餐"]:
-            meal_type = parts[1]
+    # --- 餐點/飲料 統計 ---
+    elif user_message.strip() in ["餐點 統計", "飲料 統計"]:
+        is_drink = user_message.strip().startswith("飲料")
+        # 預設自動判斷目前是哪一餐
+        if now < datetime.time(9, 0):
+            meal_type = "中餐"
+        elif now < datetime.time(17, 0):
+            meal_type = "晚餐"
         else:
-            # 預設自動判斷目前是哪一餐
-            if now < datetime.time(9, 0):
-                meal_type = "中餐"
-            elif now < datetime.time(17, 0):
-                meal_type = "晚餐"
-            else:
-                meal_type = "晚餐"  # 晚上查詢預設查晚餐
+            meal_type = "晚餐"
+        # 查詢今日所有設定的餐廳/飲料店
         c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
-        r = c.fetchone()
-        if not r:
+        restaurant_ids = [row[0] for row in c.fetchall()]
+        if not restaurant_ids:
             reply = f"今日{meal_type}尚未設定餐廳。"
         else:
-            restaurant_id = r[0]
-            c.execute('SELECT name FROM restaurant WHERE id=?', (restaurant_id,))
-            restaurant_name = c.fetchone()[0]
-            # 查詢所有點餐紀錄
-            c.execute('''SELECT u.display_name, mi.name, orr.quantity, mi.price, (orr.quantity * mi.price) as total
-                         FROM order_record orr
-                         JOIN user u ON orr.user_id = u.id
-                         JOIN menu_item mi ON orr.menu_item_id = mi.id
-                         JOIN menu_category mc ON mi.category_id = mc.id
-                         WHERE orr.date=? AND orr.meal_type=? AND mc.restaurant_id=?
-                         ORDER BY u.display_name''', (today, meal_type, restaurant_id))
-            rows = c.fetchall()
-            if not rows:
-                reply = f"今日{meal_type} {restaurant_name} 尚無點餐紀錄。"
-            else:
+            lines = [f"今日{meal_type} {'飲料' if is_drink else '餐點'}統計："]
+            total_sum = 0
+            found_any = False
+            for rid in restaurant_ids:
+                c.execute('SELECT name FROM restaurant WHERE id=?', (rid,))
+                restaurant_name = c.fetchone()[0]
+                is_this_drink = is_drink_shop_name(restaurant_name)
+                if is_drink != is_this_drink:
+                    continue
+                # 查詢該餐廳/飲料店所有點餐紀錄
+                c.execute('''SELECT u.display_name, mi.name, orr.quantity, mi.price, (orr.quantity * mi.price) as total
+                             FROM order_record orr
+                             JOIN user u ON orr.user_id = u.id
+                             JOIN menu_item mi ON orr.menu_item_id = mi.id
+                             JOIN menu_category mc ON mi.category_id = mc.id
+                             WHERE orr.date=? AND orr.meal_type=? AND mc.restaurant_id=?
+                             ORDER BY u.display_name''', (today, meal_type, rid))
+                rows = c.fetchall()
+                if not rows:
+                    continue
+                found_any = True
+                lines.append(f"\n【{restaurant_name}】")
                 summary = {}
-                total_sum = 0
                 for row in rows:
                     name = row[0] or "(未知)"
                     item = row[1]
@@ -406,12 +411,14 @@ def handle_message(event):
                     if name not in summary:
                         summary[name] = []
                     summary[name].append(f"{item} x{qty} = ${subtotal}")
-                lines = [f"今日{meal_type} {restaurant_name} 點餐統計："]
                 for name, items in summary.items():
                     lines.append(f"{name}：")
                     lines.extend([f"  {i}" for i in items])
+            if found_any:
                 lines.append(f"\n總金額：${total_sum}")
                 reply = "\n".join(lines)
+            else:
+                reply = f"今日{meal_type} {'飲料' if is_drink else '餐點'}尚無點餐紀錄。"
 
     # --- 查詢餐廳清單（分頁，僅餐廳） ---
     elif user_message.startswith("餐廳") or user_message in ["餐廳", "查詢餐廳"]:
