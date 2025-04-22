@@ -302,7 +302,8 @@ def handle_message(event):
             meal_type = parts[1]
             if meal_type == "午餐":
                 meal_type = "中餐"
-            c.execute('SELECT id, name FROM restaurant ORDER BY RANDOM() LIMIT 1')
+            # 只選非飲料店
+            c.execute("SELECT id, name FROM restaurant WHERE name NOT LIKE '%飲料%' AND name NOT LIKE '%茶%' AND name NOT LIKE '%春色%' AND name NOT LIKE '%清原%' AND name NOT LIKE '%得正%' AND name NOT LIKE '%麻古%' AND name NOT LIKE '%50嵐%' AND name NOT LIKE '%鶴茶樓%' AND name NOT LIKE '%水巷茶弄%' ORDER BY RANDOM() LIMIT 1")
             r = c.fetchone()
             if not r:
                 reply = "目前沒有餐廳資料。"
@@ -314,6 +315,26 @@ def handle_message(event):
                 reply = f"今日{meal_type}已隨機選擇：{restaurant_name}"
         else:
             reply = "請輸入：隨便吃 午餐/晚餐"
+    # --- 隨機選擇今日飲料店 ---
+    elif user_message.startswith("隨便喝"):
+        parts = user_message.split()
+        if len(parts) == 2 and parts[1] in ["中餐", "午餐", "晚餐"]:
+            meal_type = parts[1]
+            if meal_type == "午餐":
+                meal_type = "中餐"
+            # 只選飲料店
+            c.execute("SELECT id, name FROM restaurant WHERE name LIKE '%飲料%' OR name LIKE '%茶%' OR name LIKE '%春色%' OR name LIKE '%清原%' OR name LIKE '%得正%' OR name LIKE '%麻古%' OR name LIKE '%50嵐%' OR name LIKE '%鶴茶樓%' OR name LIKE '%水巷茶弄%' ORDER BY RANDOM() LIMIT 1")
+            r = c.fetchone()
+            if not r:
+                reply = "目前沒有飲料店資料。"
+            else:
+                restaurant_id, restaurant_name = r
+                today = datetime.date.today().isoformat()
+                c.execute('INSERT OR REPLACE INTO today_restaurant (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
+                conn.commit()
+                reply = f"今日{meal_type}已隨機選擇飲料店：{restaurant_name}"
+        else:
+            reply = "請輸入：隨便喝 午餐/晚餐"
     # --- 飲料店下拉式選單（分頁） ---
     elif user_message.startswith("飲料") or user_message == "飲料":
         import re
