@@ -469,10 +469,13 @@ def handle_message(event):
         else:
             meal_type = "晚餐"
         # 查詢今日所有設定的餐廳/飲料店
-        c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
+        if is_drink:
+            c.execute('SELECT restaurant_id FROM today_drink WHERE date=? AND meal_type=?', (today, meal_type))
+        else:
+            c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
         restaurant_ids = [row[0] for row in c.fetchall()]
         if not restaurant_ids:
-            reply = f"今日{meal_type}尚未設定餐廳。"
+            reply = f"今日{meal_type}尚未設定{'飲料店' if is_drink else '餐廳'}。"
         else:
             lines = [f"今日{meal_type} {'飲料' if is_drink else '餐點'}統計："]
             total_sum = 0
@@ -484,13 +487,7 @@ def handle_message(event):
                 if is_drink != is_this_drink:
                     continue
                 # 查詢該餐廳/飲料店所有點餐紀錄
-                c.execute('''SELECT u.display_name, mi.name, orr.quantity, mi.price, (orr.quantity * mi.price) as total
-                             FROM order_record orr
-                             JOIN user u ON orr.user_id = u.id
-                             JOIN menu_item mi ON orr.menu_item_id = mi.id
-                             JOIN menu_category mc ON mi.category_id = mc.id
-                             WHERE orr.date=? AND orr.meal_type=? AND mc.restaurant_id=?
-                             ORDER BY u.display_name''', (today, meal_type, rid))
+                c.execute('''SELECT u.display_name, mi.name, orr.quantity, mi.price, (orr.quantity * mi.price) as total\n                             FROM order_record orr\n                             JOIN user u ON orr.user_id = u.id\n                             JOIN menu_item mi ON orr.menu_item_id = mi.id\n                             JOIN menu_category mc ON mi.category_id = mc.id\n                             WHERE orr.date=? AND orr.meal_type=? AND mc.restaurant_id=?\n                             ORDER BY u.display_name''', (today, meal_type, rid))
                 rows = c.fetchall()
                 if not rows:
                     continue
