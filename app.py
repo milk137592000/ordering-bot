@@ -173,7 +173,7 @@ def handle_message(event):
                     lines.extend([f"  {i}" for i in items])
                 lines.append(f"\n總金額：${total_sum}")
                 reply = "\n".join(lines)
-    # --- 查詢餐廳清單（分頁） ---
+    # --- 查詢餐廳清單（分頁，僅餐廳） ---
     elif user_message.startswith("餐廳") or user_message in ["餐廳", "查詢餐廳"]:
         import re
         page = 1
@@ -181,7 +181,8 @@ def handle_message(event):
         if page_match:
             page = int(page_match.group(1))
         PAGE_SIZE = 12
-        c.execute('SELECT name FROM restaurant ORDER BY id')
+        # 只顯示非飲料店
+        c.execute("SELECT name FROM restaurant WHERE name NOT LIKE '%飲料%' AND name NOT LIKE '%茶%' AND name NOT LIKE '%春色%' AND name NOT LIKE '%清原%' AND name NOT LIKE '%得正%' AND name NOT LIKE '%麻古%' AND name NOT LIKE '%50嵐%' AND name NOT LIKE '%鶴茶樓%' AND name NOT LIKE '%水巷茶弄%' ORDER BY id")
         rows = c.fetchall()
         if rows:
             start = (page-1)*PAGE_SIZE
@@ -310,19 +311,33 @@ def handle_message(event):
                 reply = f"今日{meal_type}已隨機選擇：{restaurant_name}"
         else:
             reply = "請輸入：隨便吃 午餐/晚餐"
-    # --- 飲料店下拉式選單 ---
-    elif user_message == "飲料":
-        c.execute("SELECT name FROM restaurant WHERE name LIKE '%飲料%' OR name LIKE '%茶%' OR name LIKE '%春色%' OR name LIKE '%清原%' OR name LIKE '%得正%'")
+    # --- 飲料店下拉式選單（分頁） ---
+    elif user_message.startswith("飲料") or user_message == "飲料":
+        import re
+        page = 1
+        page_match = re.search(r'page=(\d+)', user_message)
+        if page_match:
+            page = int(page_match.group(1))
+        PAGE_SIZE = 12
+        # 只顯示飲料店
+        c.execute("SELECT name FROM restaurant WHERE name LIKE '%飲料%' OR name LIKE '%茶%' OR name LIKE '%春色%' OR name LIKE '%清原%' OR name LIKE '%得正%' OR name LIKE '%麻古%' OR name LIKE '%50嵐%' OR name LIKE '%鶴茶樓%' OR name LIKE '%水巷茶弄%' ORDER BY id")
         rows = c.fetchall()
         if rows:
+            start = (page-1)*PAGE_SIZE
+            end = start+PAGE_SIZE
+            page_rows = rows[start:end]
             quick_reply_items = [
                 QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
-                for row in rows
+                for row in page_rows
             ]
+            if end < len(rows):
+                quick_reply_items.append(
+                    QuickReplyButton(action=MessageAction(label="下一頁", text=f"飲料 page={page+1}"))
+                )
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(
-                    text="請選擇飲料店：",
+                    text=f"請選擇飲料店（第{page}頁）：",
                     quick_reply=QuickReply(items=quick_reply_items)
                 )
             )
