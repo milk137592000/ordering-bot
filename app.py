@@ -488,6 +488,76 @@ def handle_message(event):
             return
         else:
             reply = "目前沒有飲料店資料。"
+    # --- 喝啥：直接顯示今日飲料店菜單 ---
+    elif user_message.strip() == "喝啥":
+        today = datetime.date.today().isoformat()
+        now = datetime.datetime.now().time()
+        meal_type = "中餐" if now < datetime.time(17, 0) else "晚餐"
+        c.execute('SELECT r.name FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, meal_type))
+        row = c.fetchone()
+        if not row:
+            reply = f"今日{meal_type}尚未設定飲料店。"
+        else:
+            restaurant_name = row[0]
+            # 判斷是否為飲料店
+            if any(x in restaurant_name for x in ["飲料", "茶", "春色", "清原", "得正", "麻古", "50嵐", "鶴茶樓", "水巷茶弄"]):
+                reply = None
+                # 直接顯示菜單
+                c.execute('SELECT name FROM menu_category WHERE restaurant_id=(SELECT id FROM restaurant WHERE name=?)', (restaurant_name,))
+                categories = c.fetchall()
+                if not categories:
+                    reply = f"{restaurant_name} 尚無菜單資料。"
+                else:
+                    quick_reply_items = [
+                        QuickReplyButton(action=MessageAction(label=safe_label(cat[0]), text=f"菜單 {restaurant_name} {cat[0]}"))
+                        for cat in categories
+                    ]
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(
+                            text=f"請選擇 {restaurant_name} 的分類：",
+                            quick_reply=QuickReply(items=quick_reply_items)
+                        )
+                    )
+                    conn.close()
+                    return
+            else:
+                reply = f"今日{meal_type}尚未設定飲料店。"
+    # --- 吃啥：直接顯示今日餐廳菜單 ---
+    elif user_message.strip() == "吃啥":
+        today = datetime.date.today().isoformat()
+        now = datetime.datetime.now().time()
+        meal_type = "中餐" if now < datetime.time(17, 0) else "晚餐"
+        c.execute('SELECT r.name FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, meal_type))
+        row = c.fetchone()
+        if not row:
+            reply = f"今日{meal_type}尚未設定餐廳。"
+        else:
+            restaurant_name = row[0]
+            # 判斷是否為餐廳（非飲料店）
+            if not any(x in restaurant_name for x in ["飲料", "茶", "春色", "清原", "得正", "麻古", "50嵐", "鶴茶樓", "水巷茶弄"]):
+                reply = None
+                # 直接顯示菜單
+                c.execute('SELECT name FROM menu_category WHERE restaurant_id=(SELECT id FROM restaurant WHERE name=?)', (restaurant_name,))
+                categories = c.fetchall()
+                if not categories:
+                    reply = f"{restaurant_name} 尚無菜單資料。"
+                else:
+                    quick_reply_items = [
+                        QuickReplyButton(action=MessageAction(label=safe_label(cat[0]), text=f"菜單 {restaurant_name} {cat[0]}"))
+                        for cat in categories
+                    ]
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(
+                            text=f"請選擇 {restaurant_name} 的分類：",
+                            quick_reply=QuickReply(items=quick_reply_items)
+                        )
+                    )
+                    conn.close()
+                    return
+            else:
+                reply = f"今日{meal_type}尚未設定餐廳。"
     else:
         reply = f"你說了：{user_message}"
     conn.close()
