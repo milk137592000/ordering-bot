@@ -39,6 +39,12 @@ def parse_menu():
 def import_to_db(restaurants):
     conn = get_db()
     c = conn.cursor()
+    
+    # 先清除所有飲料店資料
+    c.execute('DELETE FROM menu_item WHERE category_id IN (SELECT id FROM menu_category WHERE restaurant_id IN (SELECT id FROM restaurant WHERE name IN ("鶴茶樓", "50嵐", "麻古飲料店", "水巷茶弄", "三分春色", "清原", "得正")))')
+    c.execute('DELETE FROM menu_category WHERE restaurant_id IN (SELECT id FROM restaurant WHERE name IN ("鶴茶樓", "50嵐", "麻古飲料店", "水巷茶弄", "三分春色", "清原", "得正"))')
+    c.execute('DELETE FROM restaurant WHERE name IN ("鶴茶樓", "50嵐", "麻古飲料店", "水巷茶弄", "三分春色", "清原", "得正")')
+    
     for r in restaurants:
         # 新增餐廳
         c.execute('INSERT OR IGNORE INTO restaurant (name) VALUES (?)', (r['name'],))
