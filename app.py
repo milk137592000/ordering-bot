@@ -69,6 +69,30 @@ def handle_message(event):
                     reply = f"今日{meal_type}已設定為：{restaurant_name}"
         else:
             reply = "請輸入：今日餐廳 餐廳名稱 中餐/晚餐"
+    # --- 設定今日飲料店（需指定餐別）---
+    elif user_message.startswith("今日飲料"):
+        parts = user_message.split()
+        if len(parts) >= 3:
+            drink_shop_name = parts[1]
+            meal_type = parts[2]
+            if meal_type not in ["中餐", "晚餐"]:
+                reply = "餐別請輸入『中餐』或『晚餐』"
+            else:
+                c.execute('SELECT id FROM restaurant WHERE name=?', (drink_shop_name,))
+                r = c.fetchone()
+                if not r:
+                    reply = f"找不到飲料店：{drink_shop_name}"
+                else:
+                    # 確認是否為飲料店
+                    if is_drink_shop_name(drink_shop_name):
+                        restaurant_id = r[0]
+                        c.execute('INSERT OR REPLACE INTO today_restaurant (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
+                        conn.commit()
+                        reply = f"今日{meal_type}是{drink_shop_name}飲料店"
+                    else:
+                        reply = f"{drink_shop_name} 不是飲料店，請使用「今日餐廳」指令設定一般餐廳"
+        else:
+            reply = "請輸入：今日飲料 飲料店名稱 中餐/晚餐"
     # --- 點餐（自動判斷餐別與截止時間）---
     elif user_message.startswith("點餐"):
         # 判斷目前是哪一餐
