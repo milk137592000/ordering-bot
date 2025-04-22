@@ -355,9 +355,15 @@ def handle_message(event):
                     else:
                         start = (page-1)*PAGE_SIZE
                         end = start+PAGE_SIZE
+                        is_drink_shop = any(x in restaurant_name for x in ["飲料", "茶", "春色", "清原", "得正", "麻古", "50嵐", "鶴茶樓", "水巷茶弄"])
                         page_items = items[start:end]
                         quick_reply_items = [
-                            QuickReplyButton(action=MessageAction(label=safe_label(f"{item[0]} ${item[1]}"), text=f"點餐 {item[0]} 1"))
+                            QuickReplyButton(
+                                action=MessageAction(
+                                    label=safe_label(f"{item[0]} ${item[1]}"),
+                                    text=f"點餐 {item[0]}" if is_drink_shop else f"點餐 {item[0]} 1"
+                                )
+                            )
                             for item in page_items
                         ]
                         if end < len(items):
