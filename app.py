@@ -173,19 +173,32 @@ def handle_message(event):
                     lines.extend([f"  {i}" for i in items])
                 lines.append(f"\n總金額：${total_sum}")
                 reply = "\n".join(lines)
-    # --- 查詢餐廳清單 ---
-    elif user_message in ["餐廳", "查詢餐廳"]:
+    # --- 查詢餐廳清單（分頁） ---
+    elif user_message.startswith("餐廳") or user_message in ["餐廳", "查詢餐廳"]:
+        import re
+        page = 1
+        page_match = re.search(r'page=(\d+)', user_message)
+        if page_match:
+            page = int(page_match.group(1))
+        PAGE_SIZE = 12
         c.execute('SELECT name FROM restaurant ORDER BY id')
         rows = c.fetchall()
         if rows:
+            start = (page-1)*PAGE_SIZE
+            end = start+PAGE_SIZE
+            page_rows = rows[start:end]
             quick_reply_items = [
                 QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
-                for row in rows
+                for row in page_rows
             ]
+            if end < len(rows):
+                quick_reply_items.append(
+                    QuickReplyButton(action=MessageAction(label="下一頁", text=f"餐廳 page={page+1}"))
+                )
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(
-                    text="請選擇餐廳：",
+                    text=f"請選擇餐廳（第{page}頁）：",
                     quick_reply=QuickReply(items=quick_reply_items)
                 )
             )
@@ -193,20 +206,17 @@ def handle_message(event):
             return
         else:
             reply = "目前沒有餐廳資料。"
-    # --- 查詢餐廳菜單（分頁）---
+    # --- 查詢餐廳菜單（分頁） ---
     elif user_message.startswith("菜單"):
         import re
         parts = user_message.split()
-        # 解析 page 參數
         page = 1
         page_match = re.search(r'page=(\d+)', user_message)
         if page_match:
             page = int(page_match.group(1))
-            # 移除 page=... 參數
             parts = [p for p in parts if not p.startswith('page=')]
-        PAGE_SIZE = 11
+        PAGE_SIZE = 12
         if len(parts) == 3:
-            # 「菜單 餐廳名稱 分類名稱」分頁顯示品項
             restaurant_name = parts[1]
             category_name = parts[2]
             c.execute('SELECT id FROM restaurant WHERE name=?', (restaurant_name,))
@@ -233,7 +243,6 @@ def handle_message(event):
                             QuickReplyButton(action=MessageAction(label=f"{item[0]} ${item[1]}", text=f"點餐 {item[0]} 1"))
                             for item in page_items
                         ]
-                        # 加入下一頁按鈕
                         if end < len(items):
                             quick_reply_items.append(
                                 QuickReplyButton(action=MessageAction(label="下一頁", text=f"菜單 {restaurant_name} {category_name} page={page+1}"))
@@ -248,7 +257,6 @@ def handle_message(event):
                         conn.close()
                         return
         elif len(parts) == 2:
-            # 「菜單 餐廳名稱」分頁顯示分類
             restaurant_name = parts[1]
             c.execute('SELECT id FROM restaurant WHERE name=?', (restaurant_name,))
             r = c.fetchone()
@@ -268,7 +276,6 @@ def handle_message(event):
                         QuickReplyButton(action=MessageAction(label=cat[0], text=f"菜單 {restaurant_name} {cat[0]}"))
                         for cat in page_cats
                     ]
-                    # 加入下一頁按鈕
                     if end < len(categories):
                         quick_reply_items.append(
                             QuickReplyButton(action=MessageAction(label="下一頁", text=f"菜單 {restaurant_name} page={page+1}"))
@@ -348,7 +355,16 @@ def is_db_empty(db_path):
 
 # 啟動時自動匯入 menu.md 和 drink.md
 if is_db_empty('db2.sqlite3'):
-    print('資料庫為空，自動匯入 menu.md ...')
+    print('資料庫為空，清空資料表...')
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('DELETE FROM menu_item')
+    c.execute('DELETE FROM menu_category')
+    c.execute('DELETE FROM restaurant')
+    conn.commit()
+    conn.close()
+    
+    print('自動匯入 menu.md ...')
     import_to_db(parse_menu())
     print('menu.md 已自動匯入資料庫！')
     print('自動匯入 drink.md ...')
