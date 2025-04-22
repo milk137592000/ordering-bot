@@ -13,8 +13,8 @@ def parse_menu():
     current_category = None
     for line in lines:
         line = line.strip()
-        if line.startswith('# ') and '飲料店菜單' in line:
-            current_restaurant = line.replace('# ', '').replace(' 飲料店菜單', '').strip()
+        if line.startswith('# ') and ('飲料店菜單' in line or ' 菜單' in line):
+            current_restaurant = line.replace('# ', '').replace(' 飲料店菜單', '').replace(' 菜單', '').strip()
             restaurants.append({'name': current_restaurant, 'categories': []})
         elif line.startswith('## '):
             current_category = line.replace('## ', '').strip()
