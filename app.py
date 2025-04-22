@@ -11,6 +11,9 @@ from import_drink_menu import import_to_db as import_drink_to_db, parse_menu as 
 
 load_dotenv()
 
+def safe_label(text, max_len=20):
+    return text[:max_len-1] + '…' if len(text) > max_len else text
+
 app = Flask(__name__)
 
 # 載入 LINE Bot 設定
@@ -189,12 +192,12 @@ def handle_message(event):
             end = start+PAGE_SIZE
             page_rows = rows[start:end]
             quick_reply_items = [
-                QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
+                QuickReplyButton(action=MessageAction(label=safe_label(row[0]), text=f"菜單 {row[0]}"))
                 for row in page_rows
             ]
             if end < len(rows):
                 quick_reply_items.append(
-                    QuickReplyButton(action=MessageAction(label="下一頁", text=f"餐廳 page={page+1}"))
+                    QuickReplyButton(action=MessageAction(label=safe_label("下一頁"), text=f"餐廳 page={page+1}"))
                 )
             line_bot_api.reply_message(
                 event.reply_token,
@@ -241,12 +244,12 @@ def handle_message(event):
                         end = start+PAGE_SIZE
                         page_items = items[start:end]
                         quick_reply_items = [
-                            QuickReplyButton(action=MessageAction(label=f"{item[0]} ${item[1]}", text=f"點餐 {item[0]} 1"))
+                            QuickReplyButton(action=MessageAction(label=safe_label(f"{item[0]} ${item[1]}"), text=f"點餐 {item[0]} 1"))
                             for item in page_items
                         ]
                         if end < len(items):
                             quick_reply_items.append(
-                                QuickReplyButton(action=MessageAction(label="下一頁", text=f"菜單 {restaurant_name} {category_name} page={page+1}"))
+                                QuickReplyButton(action=MessageAction(label=safe_label("下一頁"), text=f"菜單 {restaurant_name} {category_name} page={page+1}"))
                             )
                         line_bot_api.reply_message(
                             event.reply_token,
@@ -274,12 +277,12 @@ def handle_message(event):
                     end = start+PAGE_SIZE
                     page_cats = categories[start:end]
                     quick_reply_items = [
-                        QuickReplyButton(action=MessageAction(label=cat[0], text=f"菜單 {restaurant_name} {cat[0]}"))
+                        QuickReplyButton(action=MessageAction(label=safe_label(cat[0]), text=f"菜單 {restaurant_name} {cat[0]}"))
                         for cat in page_cats
                     ]
                     if end < len(categories):
                         quick_reply_items.append(
-                            QuickReplyButton(action=MessageAction(label="下一頁", text=f"菜單 {restaurant_name} page={page+1}"))
+                            QuickReplyButton(action=MessageAction(label=safe_label("下一頁"), text=f"菜單 {restaurant_name} page={page+1}"))
                         )
                     line_bot_api.reply_message(
                         event.reply_token,
@@ -327,12 +330,12 @@ def handle_message(event):
             end = start+PAGE_SIZE
             page_rows = rows[start:end]
             quick_reply_items = [
-                QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
+                QuickReplyButton(action=MessageAction(label=safe_label(row[0]), text=f"菜單 {row[0]}"))
                 for row in page_rows
             ]
             if end < len(rows):
                 quick_reply_items.append(
-                    QuickReplyButton(action=MessageAction(label="下一頁", text=f"飲料 page={page+1}"))
+                    QuickReplyButton(action=MessageAction(label=safe_label("下一頁"), text=f"飲料 page={page+1}"))
                 )
             line_bot_api.reply_message(
                 event.reply_token,
