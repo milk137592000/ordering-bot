@@ -199,11 +199,27 @@ def handle_message(event):
                 reply = f"{meal_type}點餐已截止。"
             else:
                 parts = user_message.split()
+                # 先查今日飲料店
+                c.execute('SELECT r.name FROM today_drink td JOIN restaurant r ON td.restaurant_id = r.id WHERE td.date=? AND td.meal_type=?', (today, meal_type))
+                today_drink_row = c.fetchone()
+                today_drink = today_drink_row[0] if today_drink_row else None
+                # 再查今日餐廳
                 c.execute('SELECT r.name FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, meal_type))
                 today_restaurant_row = c.fetchone()
                 today_restaurant = today_restaurant_row[0] if today_restaurant_row else None
-                # 飲料店互動流程（名稱只要包含關鍵字即可）
-                is_drink_shop = is_drink_shop_name(today_restaurant) if today_restaurant else False
+                # 飲料店互動流程
+                if today_drink:
+                    is_drink_shop = True
+                    current_shop = today_drink
+                elif today_restaurant:
+                    is_drink_shop = False
+                    current_shop = today_restaurant
+                else:
+                    reply = f"請先設定今日{meal_type}餐廳或飲料店。"
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+                    conn.close()
+                    return
+                # 飲料店互動流程
                 if is_drink_shop:
                     # 1. 選品項，詢問甜度
                     if len(parts) == 2:
@@ -243,12 +259,12 @@ def handle_message(event):
                         sweetness = parts[2]
                         ice = parts[3]
                         quick_reply_items = [
-                            QuickReplyButton(action=MessageAction(label=f"{i}杯", text=f"點餐 {item_name} {sweetness} {ice} {i}")) for i in range(0, 6)
+                            QuickReplyButton(action=MessageAction(label=f"{i}杯", text=f"點餐 {item_name} {sweetness} {ice} {i}")) for i in range(1, 6)
                         ]
                         line_bot_api.reply_message(
                             event.reply_token,
                             TextSendMessage(
-                                text="請選擇杯數（0~5）",
+                                text="請選擇杯數（1~5）",
                                 quick_reply=QuickReply(items=quick_reply_items)
                             )
                         )
@@ -262,21 +278,19 @@ def handle_message(event):
                         try:
                             quantity = int(parts[4])
                         except ValueError:
-                            reply = "請輸入正確的杯數（例如：點餐 紅茶 甜度5 冰塊5 2）"
+                            reply = "請輸入正確的杯數（例如：點餐 紅茶 甜度正常 冰塊正常 2）"
                             conn.close()
                             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
                             return
-                        # 取得今日餐廳
-                        c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
+                        # 取得今日飲料店
+                        c.execute('SELECT restaurant_id FROM today_drink WHERE date=? AND meal_type=?', (today, meal_type))
                         r = c.fetchone()
                         if not r:
-                            reply = f"請先設定今日{meal_type}餐廳。"
+                            reply = f"請先設定今日{meal_type}飲料店。"
                         else:
                             restaurant_id = r[0]
                             # 找到品項
-                            c.execute('''SELECT mi.id FROM menu_item mi
-                                         JOIN menu_category mc ON mi.category_id = mc.id
-                                         WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, restaurant_id))
+                            c.execute('''SELECT mi.id FROM menu_item mi\n                                         JOIN menu_category mc ON mi.category_id = mc.id\n                                         WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, restaurant_id))
                             item = c.fetchone()
                             if not item:
                                 reply = f"找不到品項：{item_name}"
@@ -288,8 +302,7 @@ def handle_message(event):
                                 user_row = c.fetchone()
                                 user_db_id = user_row[0]
                                 # 寫入點餐紀錄（甜度冰塊資訊可加在 note 或 reply）
-                                c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
-                                             VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
+                                c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)\n                                             VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
                                 conn.commit()
                                 reply = f"已為你登記：{item_name} x{quantity}（{meal_type}）\n{sweetness}、{ice}"
                         # 完成
@@ -330,9 +343,7 @@ def handle_message(event):
                         else:
                             restaurant_id = r[0]
                             # 找到品項
-                            c.execute('''SELECT mi.id FROM menu_item mi
-                                         JOIN menu_category mc ON mi.category_id = mc.id
-                                         WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, restaurant_id))
+                            c.execute('''SELECT mi.id FROM menu_item mi\n                                         JOIN menu_category mc ON mi.category_id = mc.id\n                                         WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, restaurant_id))
                             item = c.fetchone()
                             if not item:
                                 reply = f"找不到品項：{item_name}"
@@ -344,8 +355,7 @@ def handle_message(event):
                                 user_row = c.fetchone()
                                 user_db_id = user_row[0]
                                 # 寫入點餐紀錄
-                                c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
-                                             VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
+                                c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)\n                                             VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
                                 conn.commit()
                                 reply = f"已為你登記：{item_name} x{quantity}（{meal_type}）"
                     else:
@@ -415,8 +425,6 @@ def handle_message(event):
             for name, items in summary.items():
                 lines.append(f"{name}：")
                 lines.extend([f"  {i}" for i in items])
-        if not found_drink:
-            lines.append("(無飲料紀錄)")
         lines.append(f"\n總金額：${total_sum}")
         reply = "\n".join(lines)
 
