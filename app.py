@@ -199,21 +199,21 @@ def handle_message(event):
                 reply = f"{meal_type}點餐已截止。"
             else:
                 parts = user_message.split()
-                # 先查今日飲料店
-                c.execute('SELECT r.name FROM today_drink td JOIN restaurant r ON td.restaurant_id = r.id WHERE td.date=? AND td.meal_type=?', (today, meal_type))
-                today_drink_row = c.fetchone()
-                today_drink = today_drink_row[0] if today_drink_row else None
-                # 再查今日餐廳
+                # 先查今日餐廳
                 c.execute('SELECT r.name FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, meal_type))
                 today_restaurant_row = c.fetchone()
                 today_restaurant = today_restaurant_row[0] if today_restaurant_row else None
-                # 飲料店互動流程
-                if today_drink:
-                    is_drink_shop = True
-                    current_shop = today_drink
-                elif today_restaurant:
+                # 再查今日飲料店
+                c.execute('SELECT r.name FROM today_drink td JOIN restaurant r ON td.restaurant_id = r.id WHERE td.date=? AND td.meal_type=?', (today, meal_type))
+                today_drink_row = c.fetchone()
+                today_drink = today_drink_row[0] if today_drink_row else None
+                # 只要有今日餐廳就走餐廳互動流程，否則才走飲料店互動流程
+                if today_restaurant:
                     is_drink_shop = False
                     current_shop = today_restaurant
+                elif today_drink:
+                    is_drink_shop = True
+                    current_shop = today_drink
                 else:
                     reply = f"請先設定今日{meal_type}餐廳或飲料店。"
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
