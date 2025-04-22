@@ -92,130 +92,152 @@ def handle_message(event):
                 c.execute('SELECT r.name FROM today_restaurant tr JOIN restaurant r ON tr.restaurant_id = r.id WHERE tr.date=? AND tr.meal_type=?', (today, meal_type))
                 today_restaurant_row = c.fetchone()
                 today_restaurant = today_restaurant_row[0] if today_restaurant_row else None
-                # 1. 選品項，若飲料店，詢問甜度
-                if len(parts) == 2 and today_restaurant in drink_shops:
-                    item_name = parts[1]
-                    quick_reply_items = [
-                        QuickReplyButton(action=MessageAction(label=f"甜度{i}", text=f"點餐 {item_name} 甜度{i}")) for i in range(0, 11)
-                    ]
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(
-                            text="請選擇甜度（0~10）",
-                            quick_reply=QuickReply(items=quick_reply_items)
+                # 飲料店互動流程
+                if today_restaurant in drink_shops:
+                    # 1. 選品項，詢問甜度
+                    if len(parts) == 2:
+                        item_name = parts[1]
+                        quick_reply_items = [
+                            QuickReplyButton(action=MessageAction(label=f"甜度{i}", text=f"點餐 {item_name} 甜度{i}")) for i in range(0, 11)
+                        ]
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text="請選擇甜度（0~10）",
+                                quick_reply=QuickReply(items=quick_reply_items)
+                            )
                         )
-                    )
-                    conn.close()
-                    return
-                # 2. 選甜度，詢問冰塊
-                elif len(parts) == 3 and today_restaurant in drink_shops and parts[2].startswith("甜度"):
-                    item_name = parts[1]
-                    sweetness = parts[2]
-                    quick_reply_items = [
-                        QuickReplyButton(action=MessageAction(label=f"冰塊{i}", text=f"點餐 {item_name} {sweetness} 冰塊{i}")) for i in range(0, 11)
-                    ]
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(
-                            text="請選擇冰塊（0~10）",
-                            quick_reply=QuickReply(items=quick_reply_items)
-                        )
-                    )
-                    conn.close()
-                    return
-                # 3. 選冰塊，詢問杯數
-                elif len(parts) == 4 and today_restaurant in drink_shops and parts[2].startswith("甜度") and parts[3].startswith("冰塊"):
-                    item_name = parts[1]
-                    sweetness = parts[2]
-                    ice = parts[3]
-                    quick_reply_items = [
-                        QuickReplyButton(action=MessageAction(label=f"{i}杯", text=f"點餐 {item_name} {sweetness} {ice} {i}")) for i in range(1, 6)
-                    ]
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(
-                            text="請選擇杯數（1~5）",
-                            quick_reply=QuickReply(items=quick_reply_items)
-                        )
-                    )
-                    conn.close()
-                    return
-                # 4. 飲料店完成點餐
-                elif len(parts) == 5 and today_restaurant in drink_shops and parts[2].startswith("甜度") and parts[3].startswith("冰塊"):
-                    item_name = parts[1]
-                    sweetness = parts[2]
-                    ice = parts[3]
-                    try:
-                        quantity = int(parts[4])
-                    except ValueError:
-                        reply = "請輸入正確的杯數（例如：點餐 紅茶 甜度5 冰塊5 2）"
                         conn.close()
-                        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
                         return
-                    # 取得今日餐廳
-                    c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
-                    r = c.fetchone()
-                    if not r:
-                        reply = f"請先設定今日{meal_type}餐廳。"
-                    else:
-                        restaurant_id = r[0]
-                        # 找到品項
-                        c.execute('''SELECT mi.id FROM menu_item mi
-                                     JOIN menu_category mc ON mi.category_id = mc.id
-                                     WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, restaurant_id))
-                        item = c.fetchone()
-                        if not item:
-                            reply = f"找不到品項：{item_name}"
-                        else:
-                            menu_item_id = item[0]
-                            # 用戶註冊
-                            c.execute('INSERT OR IGNORE INTO user (line_user_id, display_name) VALUES (?, ?)', (user_id, display_name))
-                            c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
-                            user_row = c.fetchone()
-                            user_db_id = user_row[0]
-                            # 寫入點餐紀錄（甜度冰塊資訊可加在 note 或 reply）
-                            c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
-                                         VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
-                            conn.commit()
-                            reply = f"已為你登記：{item_name} x{quantity}（{meal_type}）\n{sweetness}、{ice}"
-                # 5. 一般餐廳點餐
-                elif len(parts) >= 3:
-                    item_name = parts[1]
-                    try:
-                        quantity = int(parts[2])
-                    except ValueError:
-                        reply = "請輸入正確的數量（例如：點餐 招牌雞腿便當 2）"
+                    # 2. 選甜度，詢問冰塊
+                    elif len(parts) == 3 and parts[2].startswith("甜度"):
+                        item_name = parts[1]
+                        sweetness = parts[2]
+                        quick_reply_items = [
+                            QuickReplyButton(action=MessageAction(label=f"冰塊{i}", text=f"點餐 {item_name} {sweetness} 冰塊{i}")) for i in range(0, 11)
+                        ]
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text="請選擇冰塊（0~10）",
+                                quick_reply=QuickReply(items=quick_reply_items)
+                            )
+                        )
                         conn.close()
-                        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
                         return
-                    # 取得今日餐廳
-                    c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
-                    r = c.fetchone()
-                    if not r:
-                        reply = f"請先設定今日{meal_type}餐廳。"
-                    else:
-                        restaurant_id = r[0]
-                        # 找到品項
-                        c.execute('''SELECT mi.id FROM menu_item mi
-                                     JOIN menu_category mc ON mi.category_id = mc.id
-                                     WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, restaurant_id))
-                        item = c.fetchone()
-                        if not item:
-                            reply = f"找不到品項：{item_name}"
+                    # 3. 選冰塊，詢問杯數
+                    elif len(parts) == 4 and parts[2].startswith("甜度") and parts[3].startswith("冰塊"):
+                        item_name = parts[1]
+                        sweetness = parts[2]
+                        ice = parts[3]
+                        quick_reply_items = [
+                            QuickReplyButton(action=MessageAction(label=f"{i}杯", text=f"點餐 {item_name} {sweetness} {ice} {i}")) for i in range(1, 6)
+                        ]
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text="請選擇杯數（1~5）",
+                                quick_reply=QuickReply(items=quick_reply_items)
+                            )
+                        )
+                        conn.close()
+                        return
+                    # 4. 完成飲料點餐
+                    elif len(parts) == 5 and parts[2].startswith("甜度") and parts[3].startswith("冰塊"):
+                        item_name = parts[1]
+                        sweetness = parts[2]
+                        ice = parts[3]
+                        try:
+                            quantity = int(parts[4])
+                        except ValueError:
+                            reply = "請輸入正確的杯數（例如：點餐 紅茶 甜度5 冰塊5 2）"
+                            conn.close()
+                            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+                            return
+                        # 取得今日餐廳
+                        c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
+                        r = c.fetchone()
+                        if not r:
+                            reply = f"請先設定今日{meal_type}餐廳。"
                         else:
-                            menu_item_id = item[0]
-                            # 用戶註冊
-                            c.execute('INSERT OR IGNORE INTO user (line_user_id, display_name) VALUES (?, ?)', (user_id, display_name))
-                            c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
-                            user_row = c.fetchone()
-                            user_db_id = user_row[0]
-                            # 寫入點餐紀錄
-                            c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
-                                         VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
-                            conn.commit()
-                            reply = f"已為你登記：{item_name} x{quantity}（{meal_type}）"
+                            restaurant_id = r[0]
+                            # 找到品項
+                            c.execute('''SELECT mi.id FROM menu_item mi
+                                         JOIN menu_category mc ON mi.category_id = mc.id
+                                         WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, restaurant_id))
+                            item = c.fetchone()
+                            if not item:
+                                reply = f"找不到品項：{item_name}"
+                            else:
+                                menu_item_id = item[0]
+                                # 用戶註冊
+                                c.execute('INSERT OR IGNORE INTO user (line_user_id, display_name) VALUES (?, ?)', (user_id, display_name))
+                                c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+                                user_row = c.fetchone()
+                                user_db_id = user_row[0]
+                                # 寫入點餐紀錄（甜度冰塊資訊可加在 note 或 reply）
+                                c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
+                                             VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
+                                conn.commit()
+                                reply = f"已為你登記：{item_name} x{quantity}（{meal_type}）\n{sweetness}、{ice}"
+                        # 完成
+                    else:
+                        reply = "請依序選擇品項、甜度、冰塊、杯數。"
+                # 一般餐廳互動流程
                 else:
-                    reply = "請輸入：點餐 品項 數量（例如：點餐 招牌雞腿便當 2）"
+                    # 1. 選品項，詢問份數
+                    if len(parts) == 2:
+                        item_name = parts[1]
+                        quick_reply_items = [
+                            QuickReplyButton(action=MessageAction(label=f"{i}份", text=f"點餐 {item_name} {i}")) for i in range(1, 6)
+                        ]
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text="要幾份？",
+                                quick_reply=QuickReply(items=quick_reply_items)
+                            )
+                        )
+                        conn.close()
+                        return
+                    # 2. 完成點餐
+                    elif len(parts) == 3:
+                        item_name = parts[1]
+                        try:
+                            quantity = int(parts[2])
+                        except ValueError:
+                            reply = "請輸入正確的數量（例如：點餐 招牌雞腿便當 2）"
+                            conn.close()
+                            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+                            return
+                        # 取得今日餐廳
+                        c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
+                        r = c.fetchone()
+                        if not r:
+                            reply = f"請先設定今日{meal_type}餐廳。"
+                        else:
+                            restaurant_id = r[0]
+                            # 找到品項
+                            c.execute('''SELECT mi.id FROM menu_item mi
+                                         JOIN menu_category mc ON mi.category_id = mc.id
+                                         WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, restaurant_id))
+                            item = c.fetchone()
+                            if not item:
+                                reply = f"找不到品項：{item_name}"
+                            else:
+                                menu_item_id = item[0]
+                                # 用戶註冊
+                                c.execute('INSERT OR IGNORE INTO user (line_user_id, display_name) VALUES (?, ?)', (user_id, display_name))
+                                c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+                                user_row = c.fetchone()
+                                user_db_id = user_row[0]
+                                # 寫入點餐紀錄
+                                c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
+                                             VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
+                                conn.commit()
+                                reply = f"已為你登記：{item_name} x{quantity}（{meal_type}）"
+                    else:
+                        reply = "請輸入：點餐 品項 數量（例如：點餐 招牌雞腿便當 2）"
     # --- 統計（可指定餐別）---
     elif user_message.startswith("統計"):
         parts = user_message.split()
