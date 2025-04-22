@@ -131,12 +131,12 @@ def handle_message(event):
                         sweetness = parts[2]
                         ice = parts[3]
                         quick_reply_items = [
-                            QuickReplyButton(action=MessageAction(label=f"{i}杯", text=f"點餐 {item_name} {sweetness} {ice} {i}")) for i in range(1, 6)
+                            QuickReplyButton(action=MessageAction(label=f"{i}杯", text=f"點餐 {item_name} {sweetness} {ice} {i}")) for i in range(0, 6)
                         ]
                         line_bot_api.reply_message(
                             event.reply_token,
                             TextSendMessage(
-                                text="請選擇杯數（1~5）",
+                                text="請選擇杯數（0~5）",
                                 quick_reply=QuickReply(items=quick_reply_items)
                             )
                         )
