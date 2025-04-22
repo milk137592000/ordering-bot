@@ -21,18 +21,14 @@ def parse_menu():
             if current_restaurant:
                 restaurants[-1]['categories'].append({'name': current_category, 'items': []})
         elif line.startswith('- '):
-            # 品項與價格
-            m = re.match(r'- (.+?)\s*[.。．…]*\s*[MLL$]*(\$[0-9]+)(/\S+)?', line)
-            if not m:
-                m = re.match(r'- (.+?)\s*[.。．…]*\s*([MLL$]*[0-9]+)', line)
-            if m and current_restaurant and current_category:
+            # 只取品項名稱（不含單位）
+            m = re.match(r'- ([^\s\d]+)', line)
+            # 取價格（支援 M$30、L$40、杯$30、瓶$45 等）
+            price_match = re.search(r'\$([0-9]+)', line)
+            if m and price_match and current_restaurant and current_category:
                 item_name = m.group(1).strip()
-                price = m.group(2).replace('$','').replace('M','').replace('L','')
-                try:
-                    price = int(price)
-                except:
-                    price = 0
-                note = m.group(3).strip() if len(m.groups()) > 2 and m.group(3) else None
+                price = int(price_match.group(1))
+                note = None
                 restaurants[-1]['categories'][-1]['items'].append({'name': item_name, 'price': price, 'note': note})
     return restaurants
 
