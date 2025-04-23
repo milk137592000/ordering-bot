@@ -974,6 +974,68 @@ def handle_message(event):
             conn.commit()
             reply = "你今日所有飲料訂單已取消。"
 
+    # --- 我吃啥：顯示該用戶今日所點餐點 ---
+    elif user_message.strip() == "我吃啥":
+        today = datetime.date.today().isoformat()
+        # 判斷目前是哪一餐
+        if now < datetime.time(9, 0):
+            meal_type = "中餐"
+        elif now < datetime.time(17, 0):
+            meal_type = "晚餐"
+        else:
+            meal_type = "晚餐"
+        c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+        user_row = c.fetchone()
+        if not user_row:
+            reply = "找不到你的用戶資料，請先點餐一次。"
+        else:
+            user_db_id = user_row[0]
+            # 查詢今日所有非飲料店的餐點
+            c.execute('''SELECT r.name, mi.name, orr.quantity, mi.price, (orr.quantity * mi.price) as total\n                         FROM order_record orr\n                         JOIN menu_item mi ON orr.menu_item_id = mi.id\n                         JOIN menu_category mc ON mi.category_id = mc.id\n                         JOIN restaurant r ON mc.restaurant_id = r.id\n                         WHERE orr.user_id=? AND orr.date=? AND orr.meal_type=? AND r.name NOT LIKE "%飲料%" AND r.name NOT LIKE "%茶%" AND r.name NOT LIKE "%春色%" AND r.name NOT LIKE "%清原%" AND r.name NOT LIKE "%得正%" AND r.name NOT LIKE "%麻古%" AND r.name NOT LIKE "%50嵐%" AND r.name NOT LIKE "%鶴茶樓%" AND r.name NOT LIKE "%水巷茶弄%"\n                         ORDER BY r.name''', (user_db_id, today, meal_type))
+            rows = c.fetchall()
+            if not rows:
+                reply = f"你今日{meal_type}尚未點餐。"
+            else:
+                lines = [f"你今日{meal_type}餐點："]
+                total = 0
+                for row in rows:
+                    restaurant, item, qty, price, subtotal = row
+                    lines.append(f"{restaurant}：{item} x{qty} = ${subtotal}")
+                    total += subtotal
+                lines.append(f"合計：${total}")
+                reply = "\n".join(lines)
+
+    # --- 我喝啥：顯示該用戶今日所點飲料 ---
+    elif user_message.strip() == "我喝啥":
+        today = datetime.date.today().isoformat()
+        # 判斷目前是哪一餐
+        if now < datetime.time(9, 0):
+            meal_type = "中餐"
+        elif now < datetime.time(17, 0):
+            meal_type = "晚餐"
+        else:
+            meal_type = "晚餐"
+        c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+        user_row = c.fetchone()
+        if not user_row:
+            reply = "找不到你的用戶資料，請先點餐一次。"
+        else:
+            user_db_id = user_row[0]
+            # 查詢今日所有飲料店的飲料
+            c.execute('''SELECT r.name, mi.name, orr.quantity, mi.price, (orr.quantity * mi.price) as total\n                         FROM order_record orr\n                         JOIN menu_item mi ON orr.menu_item_id = mi.id\n                         JOIN menu_category mc ON mi.category_id = mc.id\n                         JOIN restaurant r ON mc.restaurant_id = r.id\n                         WHERE orr.user_id=? AND orr.date=? AND orr.meal_type=? AND (r.name LIKE "%飲料%" OR r.name LIKE "%茶%" OR r.name LIKE "%春色%" OR r.name LIKE "%清原%" OR r.name LIKE "%得正%" OR r.name LIKE "%麻古%" OR r.name LIKE "%50嵐%" OR r.name LIKE "%鶴茶樓%" OR r.name LIKE "%水巷茶弄%")\n                         ORDER BY r.name''', (user_db_id, today, meal_type))
+            rows = c.fetchall()
+            if not rows:
+                reply = f"你今日{meal_type}尚未點飲料。"
+            else:
+                lines = [f"你今日{meal_type}飲料："]
+                total = 0
+                for row in rows:
+                    restaurant, item, qty, price, subtotal = row
+                    lines.append(f"{restaurant}：{item} x{qty} = ${subtotal}")
+                    total += subtotal
+                lines.append(f"合計：${total}")
+                reply = "\n".join(lines)
+
     else: # 所有其他指令都落到這裡
         reply = f"無法識別指令：{user_message}"
 
