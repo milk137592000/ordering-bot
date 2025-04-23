@@ -268,6 +268,16 @@ def handle_message(event):
                     if is_drink_shop_name(restaurant_name):
                         reply = f"{restaurant_name} 是飲料店，請用『今日飲料』設定飲料店。"
                     else:
+                        # 查詢舊的今日餐廳
+                        c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
+                        old_row = c.fetchone()
+                        if old_row:
+                            old_restaurant_id = old_row[0]
+                            # 刪除所有人今日該餐別、舊餐廳的點餐紀錄
+                            c.execute('''DELETE FROM order_record WHERE date=? AND meal_type=? AND menu_item_id IN (
+                                SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mc.restaurant_id=?
+                            )''', (today, meal_type, old_restaurant_id))
+                            conn.commit()
                         c.execute('INSERT OR REPLACE INTO today_restaurant (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
                         conn.commit()
                         reply = f"今日{meal_type}已設定為：{restaurant_name}"
@@ -291,6 +301,16 @@ def handle_message(event):
                     # 僅允許飲料店
                     if is_drink_shop_name(drink_shop_name):
                         restaurant_id = r[0]
+                        # 查詢舊的今日飲料店
+                        c.execute('SELECT restaurant_id FROM today_drink WHERE date=? AND meal_type=?', (today, meal_type))
+                        old_row = c.fetchone()
+                        if old_row:
+                            old_drink_id = old_row[0]
+                            # 刪除所有人今日該餐別、舊飲料店的點餐紀錄
+                            c.execute('''DELETE FROM order_record WHERE date=? AND meal_type=? AND menu_item_id IN (
+                                SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mc.restaurant_id=?
+                            )''', (today, meal_type, old_drink_id))
+                            conn.commit()
                         c.execute('INSERT OR REPLACE INTO today_drink (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
                         conn.commit()
                         reply = f"今日{meal_type}已設定為飲料店：{drink_shop_name}"
@@ -774,6 +794,16 @@ def handle_message(event):
             else:
                 restaurant_id, restaurant_name = r
                 today = datetime.date.today().isoformat()
+                # 查詢舊的今日餐廳
+                c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
+                old_row = c.fetchone()
+                if old_row:
+                    old_restaurant_id = old_row[0]
+                    # 刪除所有人今日該餐別、舊餐廳的點餐紀錄
+                    c.execute('''DELETE FROM order_record WHERE date=? AND meal_type=? AND menu_item_id IN (
+                        SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mc.restaurant_id=?
+                    )''', (today, meal_type, old_restaurant_id))
+                    conn.commit()
                 c.execute('INSERT OR REPLACE INTO today_restaurant (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
                 conn.commit()
                 reply = f"今日{meal_type}已隨機選擇：{restaurant_name}"
@@ -798,6 +828,16 @@ def handle_message(event):
             else:
                 restaurant_id, restaurant_name = r
                 today = datetime.date.today().isoformat()
+                # 查詢舊的今日飲料店
+                c.execute('SELECT restaurant_id FROM today_drink WHERE date=? AND meal_type=?', (today, meal_type))
+                old_row = c.fetchone()
+                if old_row:
+                    old_drink_id = old_row[0]
+                    # 刪除所有人今日該餐別、舊飲料店的點餐紀錄
+                    c.execute('''DELETE FROM order_record WHERE date=? AND meal_type=? AND menu_item_id IN (
+                        SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mc.restaurant_id=?
+                    )''', (today, meal_type, old_drink_id))
+                    conn.commit()
                 c.execute('INSERT OR REPLACE INTO today_drink (date, meal_type, restaurant_id) VALUES (?, ?, ?)', (today, meal_type, restaurant_id))
                 conn.commit()
                 reply = f"今日{meal_type}已隨機選擇飲料店：{restaurant_name}"
