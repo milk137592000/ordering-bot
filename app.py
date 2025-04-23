@@ -660,6 +660,9 @@ def handle_message(event):
                 reply = f"今日{meal_type}已隨機選擇：{restaurant_name}"
         else:
             reply = "請輸入：隨便吃 午餐/晚餐"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+        conn.close()
+        return
 
     # --- 隨機選擇今日飲料店 ---
     elif user_message.startswith("隨便喝"):
