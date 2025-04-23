@@ -874,6 +874,43 @@ def handle_message(event):
             lines.append("今日尚無點餐紀錄。")
         reply = "\n".join(lines)
 
+    # --- 取消所有餐點/飲料 ---
+    elif user_message.strip() == "取消 餐點":
+        today = datetime.date.today().isoformat()
+        # 取得 user_id
+        c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+        user_row = c.fetchone()
+        if not user_row:
+            reply = "找不到你的用戶資料，請先點餐一次。"
+        else:
+            user_db_id = user_row[0]
+            # 找出所有非飲料店的 menu_item
+            c.execute('''DELETE FROM order_record WHERE user_id=? AND date=? AND menu_item_id IN (
+                SELECT mi.id FROM menu_item mi
+                JOIN menu_category mc ON mi.category_id = mc.id
+                JOIN restaurant r ON mc.restaurant_id = r.id
+                WHERE r.name NOT LIKE "%飲料%" AND r.name NOT LIKE "%茶%" AND r.name NOT LIKE "%春色%" AND r.name NOT LIKE "%清原%" AND r.name NOT LIKE "%得正%" AND r.name NOT LIKE "%麻古%" AND r.name NOT LIKE "%50嵐%" AND r.name NOT LIKE "%鶴茶樓%" AND r.name NOT LIKE "%水巷茶弄%"
+            )''', (user_db_id, today))
+            conn.commit()
+            reply = "你今日所有餐點訂單已取消。"
+    elif user_message.strip() == "取消 飲料":
+        today = datetime.date.today().isoformat()
+        c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+        user_row = c.fetchone()
+        if not user_row:
+            reply = "找不到你的用戶資料，請先點餐一次。"
+        else:
+            user_db_id = user_row[0]
+            # 找出所有飲料店的 menu_item
+            c.execute('''DELETE FROM order_record WHERE user_id=? AND date=? AND menu_item_id IN (
+                SELECT mi.id FROM menu_item mi
+                JOIN menu_category mc ON mi.category_id = mc.id
+                JOIN restaurant r ON mc.restaurant_id = r.id
+                WHERE r.name LIKE "%飲料%" OR r.name LIKE "%茶%" OR r.name LIKE "%春色%" OR r.name LIKE "%清原%" OR r.name LIKE "%得正%" OR r.name LIKE "%麻古%" OR r.name LIKE "%50嵐%" OR r.name LIKE "%鶴茶樓%" OR r.name LIKE "%水巷茶弄%"
+            )''', (user_db_id, today))
+            conn.commit()
+            reply = "你今日所有飲料訂單已取消。"
+
     else: # 所有其他指令都落到這裡
         reply = f"無法識別指令：{user_message}"
 
