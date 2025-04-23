@@ -50,6 +50,125 @@ def handle_message(event):
     conn = get_db()
     c = conn.cursor()
 
+    # --- 管理員名單（以 display_name 判斷）---
+    ADMIN_USERS = ["Eugene Fang"]
+
+    # --- 取消訂餐 ---
+    if user_message.startswith("取消訂餐"):
+        parts = user_message.split()
+        today = datetime.date.today().isoformat()
+        # 判斷目前是哪一餐
+        if now < datetime.time(9, 0):
+            meal_type = "中餐"
+        elif now < datetime.time(17, 0):
+            meal_type = "晚餐"
+        else:
+            meal_type = "晚餐"
+        # 管理員可指定人名
+        if len(parts) == 3 and display_name in ADMIN_USERS:
+            item_name = parts[1]
+            target_name = parts[2]
+            c.execute('SELECT id FROM user WHERE display_name=?', (target_name,))
+            user_row = c.fetchone()
+            if not user_row:
+                reply = f"找不到用戶：{target_name}"
+            else:
+                user_db_id = user_row[0]
+                # 找到訂單
+                c.execute('''DELETE FROM order_record WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id IN (SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mi.name=?)''', (user_db_id, today, meal_type, item_name))
+                conn.commit()
+                reply = f"已取消 {target_name} 的 {item_name} 訂單"
+        elif len(parts) == 2:
+            item_name = parts[1]
+            # 只允許刪除自己
+            c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+            user_row = c.fetchone()
+            if not user_row:
+                reply = "找不到你的用戶資料，請先點餐一次。"
+            else:
+                user_db_id = user_row[0]
+                c.execute('''DELETE FROM order_record WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id IN (SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mi.name=?)''', (user_db_id, today, meal_type, item_name))
+                conn.commit()
+                reply = f"已取消你的 {item_name} 訂單"
+        else:
+            reply = "請輸入：取消訂餐 品項名稱 或 取消訂餐 品項名稱 使用者名稱（管理員）"
+
+    # --- 修改訂餐 ---
+    elif user_message.startswith("修改訂餐"):
+        parts = user_message.split()
+        today = datetime.date.today().isoformat()
+        # 判斷目前是哪一餐
+        if now < datetime.time(9, 0):
+            meal_type = "中餐"
+        elif now < datetime.time(17, 0):
+            meal_type = "晚餐"
+        else:
+            meal_type = "晚餐"
+        # 管理員可指定人名
+        if len(parts) == 4 and display_name in ADMIN_USERS:
+            item_name = parts[1]
+            try:
+                new_qty = int(parts[2])
+            except ValueError:
+                reply = "請輸入正確的數量"
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+                conn.close()
+                return
+            target_name = parts[3]
+            c.execute('SELECT id FROM user WHERE display_name=?', (target_name,))
+            user_row = c.fetchone()
+            if not user_row:
+                reply = f"找不到用戶：{target_name}"
+            else:
+                user_db_id = user_row[0]
+                # 找到訂單
+                c.execute('''SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mi.name=?''', (item_name,))
+                item_row = c.fetchone()
+                if not item_row:
+                    reply = f"找不到品項：{item_name}"
+                else:
+                    menu_item_id = item_row[0]
+                    if new_qty == 0:
+                        c.execute('DELETE FROM order_record WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id=?', (user_db_id, today, meal_type, menu_item_id))
+                        conn.commit()
+                        reply = f"已取消 {target_name} 的 {item_name} 訂單"
+                    else:
+                        c.execute('UPDATE order_record SET quantity=? WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id=?', (new_qty, user_db_id, today, meal_type, menu_item_id))
+                        conn.commit()
+                        reply = f"已修改 {target_name} 的 {item_name} 數量為 {new_qty}"
+        elif len(parts) == 3:
+            item_name = parts[1]
+            try:
+                new_qty = int(parts[2])
+            except ValueError:
+                reply = "請輸入正確的數量"
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+                conn.close()
+                return
+            # 只允許修改自己
+            c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+            user_row = c.fetchone()
+            if not user_row:
+                reply = "找不到你的用戶資料，請先點餐一次。"
+            else:
+                user_db_id = user_row[0]
+                c.execute('''SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mi.name=?''', (item_name,))
+                item_row = c.fetchone()
+                if not item_row:
+                    reply = f"找不到品項：{item_name}"
+                else:
+                    menu_item_id = item_row[0]
+                    if new_qty == 0:
+                        c.execute('DELETE FROM order_record WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id=?', (user_db_id, today, meal_type, menu_item_id))
+                        conn.commit()
+                        reply = f"已取消你的 {item_name} 訂單"
+                    else:
+                        c.execute('UPDATE order_record SET quantity=? WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id=?', (new_qty, user_db_id, today, meal_type, menu_item_id))
+                        conn.commit()
+                        reply = f"已修改你的 {item_name} 數量為 {new_qty}"
+        else:
+            reply = "請輸入：修改訂餐 品項名稱 新數量 或 修改訂餐 品項名稱 新數量 使用者名稱（管理員）"
+
     # --- 吃啥：直接顯示今日餐廳菜單 ---
     if user_message.strip() == "吃啥":
         today = datetime.date.today().isoformat()
@@ -754,125 +873,6 @@ def handle_message(event):
         else:
             lines.append("今日尚無點餐紀錄。")
         reply = "\n".join(lines)
-
-    # --- 管理員名單（以 display_name 判斷）---
-    ADMIN_USERS = ["Eugene Fang"]
-
-    # --- 取消訂餐 ---
-    if user_message.startswith("取消訂餐"):
-        parts = user_message.split()
-        today = datetime.date.today().isoformat()
-        # 判斷目前是哪一餐
-        if now < datetime.time(9, 0):
-            meal_type = "中餐"
-        elif now < datetime.time(17, 0):
-            meal_type = "晚餐"
-        else:
-            meal_type = "晚餐"
-        # 管理員可指定人名
-        if len(parts) == 3 and display_name in ADMIN_USERS:
-            item_name = parts[1]
-            target_name = parts[2]
-            c.execute('SELECT id FROM user WHERE display_name=?', (target_name,))
-            user_row = c.fetchone()
-            if not user_row:
-                reply = f"找不到用戶：{target_name}"
-            else:
-                user_db_id = user_row[0]
-                # 找到訂單
-                c.execute('''DELETE FROM order_record WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id IN (SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mi.name=?)''', (user_db_id, today, meal_type, item_name))
-                conn.commit()
-                reply = f"已取消 {target_name} 的 {item_name} 訂單"
-        elif len(parts) == 2:
-            item_name = parts[1]
-            # 只允許刪除自己
-            c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
-            user_row = c.fetchone()
-            if not user_row:
-                reply = "找不到你的用戶資料，請先點餐一次。"
-            else:
-                user_db_id = user_row[0]
-                c.execute('''DELETE FROM order_record WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id IN (SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mi.name=?)''', (user_db_id, today, meal_type, item_name))
-                conn.commit()
-                reply = f"已取消你的 {item_name} 訂單"
-        else:
-            reply = "請輸入：取消訂餐 品項名稱 或 取消訂餐 品項名稱 使用者名稱（管理員）"
-
-    # --- 修改訂餐 ---
-    elif user_message.startswith("修改訂餐"):
-        parts = user_message.split()
-        today = datetime.date.today().isoformat()
-        # 判斷目前是哪一餐
-        if now < datetime.time(9, 0):
-            meal_type = "中餐"
-        elif now < datetime.time(17, 0):
-            meal_type = "晚餐"
-        else:
-            meal_type = "晚餐"
-        # 管理員可指定人名
-        if len(parts) == 4 and display_name in ADMIN_USERS:
-            item_name = parts[1]
-            try:
-                new_qty = int(parts[2])
-            except ValueError:
-                reply = "請輸入正確的數量"
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-                conn.close()
-                return
-            target_name = parts[3]
-            c.execute('SELECT id FROM user WHERE display_name=?', (target_name,))
-            user_row = c.fetchone()
-            if not user_row:
-                reply = f"找不到用戶：{target_name}"
-            else:
-                user_db_id = user_row[0]
-                # 找到訂單
-                c.execute('''SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mi.name=?''', (item_name,))
-                item_row = c.fetchone()
-                if not item_row:
-                    reply = f"找不到品項：{item_name}"
-                else:
-                    menu_item_id = item_row[0]
-                    if new_qty == 0:
-                        c.execute('DELETE FROM order_record WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id=?', (user_db_id, today, meal_type, menu_item_id))
-                        conn.commit()
-                        reply = f"已取消 {target_name} 的 {item_name} 訂單"
-                    else:
-                        c.execute('UPDATE order_record SET quantity=? WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id=?', (new_qty, user_db_id, today, meal_type, menu_item_id))
-                        conn.commit()
-                        reply = f"已修改 {target_name} 的 {item_name} 數量為 {new_qty}"
-        elif len(parts) == 3:
-            item_name = parts[1]
-            try:
-                new_qty = int(parts[2])
-            except ValueError:
-                reply = "請輸入正確的數量"
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-                conn.close()
-                return
-            # 只允許修改自己
-            c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
-            user_row = c.fetchone()
-            if not user_row:
-                reply = "找不到你的用戶資料，請先點餐一次。"
-            else:
-                user_db_id = user_row[0]
-                c.execute('''SELECT mi.id FROM menu_item mi JOIN menu_category mc ON mi.category_id = mc.id WHERE mi.name=?''', (item_name,))
-                item_row = c.fetchone()
-                if not item_row:
-                    reply = f"找不到品項：{item_name}"
-                else:
-                    menu_item_id = item_row[0]
-                    if new_qty == 0:
-                        c.execute('DELETE FROM order_record WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id=?', (user_db_id, today, meal_type, menu_item_id))
-                        conn.commit()
-                        reply = f"已取消你的 {item_name} 訂單"
-                    else:
-                        c.execute('UPDATE order_record SET quantity=? WHERE user_id=? AND date=? AND meal_type=? AND menu_item_id=?', (new_qty, user_db_id, today, meal_type, menu_item_id))
-                        conn.commit()
-                        reply = f"已修改你的 {item_name} 數量為 {new_qty}"
-        else:
-            reply = "請輸入：修改訂餐 品項名稱 新數量 或 修改訂餐 品項名稱 新數量 使用者名稱（管理員）"
 
     else: # 所有其他指令都落到這裡
         reply = f"無法識別指令：{user_message}"
