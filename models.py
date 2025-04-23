@@ -80,6 +80,15 @@ def init_db():
             FOREIGN KEY (menu_item_id) REFERENCES menu_item(id)
         )
     ''')
+    # 結單狀態表
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS order_status (
+            date TEXT NOT NULL,
+            meal_type TEXT NOT NULL, -- '中餐' 或 '晚餐'
+            closed INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (date, meal_type)
+        )
+    ''')
     conn.commit()
     conn.close()
 

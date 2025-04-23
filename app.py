@@ -319,6 +319,21 @@ def handle_message(event):
         else:
             reply = "請輸入：今日飲料 飲料店名稱 中餐/晚餐"
 
+    # --- 結單 ---
+    elif user_message.strip() == "結單":
+        today = datetime.date.today().isoformat()
+        # 判斷目前是哪一餐
+        if now < datetime.time(9, 0):
+            meal_type = "中餐"
+        elif now < datetime.time(17, 0):
+            meal_type = "晚餐"
+        else:
+            meal_type = "晚餐"
+        # 設定結單
+        c.execute('INSERT OR REPLACE INTO order_status (date, meal_type, closed) VALUES (?, ?, 1)', (today, meal_type))
+        conn.commit()
+        reply = f"今日{meal_type}已結單，無法再新增訂單。"
+
     # --- 點餐（自動判斷餐別與截止時間）---
     elif user_message.startswith("點餐"):
         # 判斷目前是哪一餐
@@ -333,6 +348,14 @@ def handle_message(event):
         if not meal_type:
             reply = "目前已超過所有點餐截止時間。"
         else:
+            # 檢查是否已結單
+            c.execute('SELECT closed FROM order_status WHERE date=? AND meal_type=?', (today, meal_type))
+            row = c.fetchone()
+            if row and row[0] == 1:
+                reply = f"今日{meal_type}已結單，無法再新增訂單。"
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+                conn.close()
+                return
             # 檢查是否已截止
             if (meal_type == "中餐" and now >= datetime.time(9, 0)) or (meal_type == "晚餐" and now >= datetime.time(17, 0)):
                 reply = f"{meal_type}點餐已截止。"
