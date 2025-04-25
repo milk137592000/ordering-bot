@@ -691,7 +691,7 @@ def handle_message(event):
             end = start+PAGE_SIZE
             page_rows = rows[start:end]
             quick_reply_items = [
-                QuickReplyButton(action=MessageAction(label=safe_label(row[0]), text=f"餐廳菜單 {row[0]}"))
+                QuickReplyButton(action=MessageAction(label=safe_label(row[0]), text=f"菜單 {row[0]}"))
                 for row in page_rows
             ]
             if end < len(rows):
@@ -886,7 +886,7 @@ def handle_message(event):
             end = start+PAGE_SIZE
             page_rows = rows[start:end]
             quick_reply_items = [
-                QuickReplyButton(action=MessageAction(label=safe_label(row[0]), text=f"餐廳菜單 {row[0]}"))
+                QuickReplyButton(action=MessageAction(label=safe_label(row[0]), text=f"菜單 {row[0]}"))
                 for row in page_rows
             ]
             if end < len(rows):

@@ -1,0 +1,1 @@
+Tables: [('restaurant',), ('sqlite_sequence',), ('menu_category',), ('menu_item',), ('user',), ('today_restaurant',), ('order_record',), ('today_drink',), ('order_status',)]
