@@ -200,8 +200,8 @@ def handle_message(event):
                 reply = f"找不到餐廳：{restaurant_name}"
             else:
                 restaurant_id = r[0]
-                # 取出所有分類及品項
-                c.execute('''SELECT mc.name as category, mi.id, mi.name, mi.price FROM menu_category mc
+                # 取出所有分類及品項，顯示 code
+                c.execute('''SELECT mc.name as category, mi.code, mi.name, mi.price FROM menu_category mc
                              JOIN menu_item mi ON mi.category_id = mc.id
                              WHERE mc.restaurant_id=? ORDER BY mc.id, mi.id''', (restaurant_id,))
                 items = c.fetchall()
@@ -211,45 +211,73 @@ def handle_message(event):
                     lines = [f"{restaurant_name} 菜單："]
                     last_cat = None
                     for row in items:
-                        cat, iid, iname, price = row
+                        cat, code, iname, price = row
                         if cat != last_cat:
                             lines.append(f"\n【{cat}】")
                             last_cat = cat
-                        lines.append(f"[{iid}] {iname} ${price}")
+                        lines.append(f"[{code}] {iname} ${price}")
                     reply = "\n".join(lines)
         else:
             reply = "請輸入：菜單 餐廳名稱"
         conn.close()
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
         return
-    # --- 點餐新流程：輸入品項編號，回覆份數選單 ---
-    # 用簡單 in-memory 狀態記錄 user_id -> menu_item_id
+    # --- 查詢飲料店清單 ---
+    elif user_message in ["飲料", "查詢飲料店"]:
+        # 只顯示名稱含「飲料」或「茶」的店家
+        c.execute("SELECT name FROM restaurant WHERE name LIKE '%飲料%' OR name LIKE '%茶%' ORDER BY id")
+        rows = c.fetchall()
+        if rows:
+            quick_reply_items = [
+                QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
+                for row in rows
+            ]
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text="請選擇飲料店：",
+                    quick_reply=QuickReply(items=quick_reply_items)
+                )
+            )
+            conn.close()
+            return
+        else:
+            reply = "目前沒有飲料店資料。"
+    # --- 點餐新流程：輸入品項編號（code 或 id），回覆份數選單 ---
     if not hasattr(app, 'pending_order'):
         app.pending_order = {}
 
+    # 支援 code 或 id
+    menu_item_id = None
+    menu_item_code = None
     if user_message.isdigit():
         menu_item_id = int(user_message)
-        c.execute('SELECT mi.name, mi.price, mc.restaurant_id, r.name as restaurant_name FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.id=?', (menu_item_id,))
+    elif len(user_message) == 4 and user_message[:2].isalpha() and user_message[2:].isdigit():
+        menu_item_code = user_message.upper()
+    if menu_item_id or menu_item_code:
+        if menu_item_code:
+            c.execute('SELECT mi.id, mi.name, mi.price, mc.restaurant_id, r.name as restaurant_name FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.code=?', (menu_item_code,))
+        else:
+            c.execute('SELECT mi.id, mi.name, mi.price, mc.restaurant_id, r.name as restaurant_name FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.id=?', (menu_item_id,))
         item = c.fetchone()
         if not item:
-            reply = f"找不到此品項編號：{menu_item_id}"
+            reply = f"找不到此品項編號：{user_message}"
             conn.close()
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
             return
         # 記錄這個 user_id 的 pending menu_item_id
-        app.pending_order[user_id] = menu_item_id
+        app.pending_order[user_id] = item[0]
         # 回覆份數 quick reply
         quick_reply_items = [QuickReplyButton(action=MessageAction(label=f"{i}份", text=str(i))) for i in range(1,6)]
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(
-                text=f"你選擇了 [{menu_item_id}] {item['name']} (${item['price']})\n請選擇需要幾份：",
+                text=f"你選擇了 [{item[1]}] {item[2]} (${item[3]})\n請選擇需要幾份：",
                 quick_reply=QuickReply(items=quick_reply_items)
             )
         )
         conn.close()
         return
-
     # --- 點餐新流程：收到份數，完成點餐 ---
     if user_id in getattr(app, 'pending_order', {}):
         if user_message in [str(i) for i in range(1,6)]:
