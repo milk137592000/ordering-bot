@@ -80,48 +80,44 @@ def handle_message(event):
         if not meal_type:
             reply = "目前已超過所有點餐截止時間。"
         else:
-            # 檢查是否已截止
-            if (meal_type == "中餐" and now >= datetime.time(9, 0)) or (meal_type == "晚餐" and now >= datetime.time(17, 0)):
-                reply = f"{meal_type}點餐已截止。"
-            else:
-                parts = user_message.split()
-                if len(parts) >= 3:
-                    item_name = parts[1]
-                    try:
-                        quantity = int(parts[2])
-                    except ValueError:
-                        reply = "請輸入正確的數量（例如：點餐 招牌雞腿便當 2）"
-                        conn.close()
-                        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-                        return
-                    # 取得今日餐廳
-                    c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
-                    r = c.fetchone()
-                    if not r:
-                        reply = f"請先設定今日{meal_type}餐廳。"
-                    else:
-                        restaurant_id = r[0]
-                        # 找到品項
-                        c.execute('''SELECT mi.id FROM menu_item mi
-                                     JOIN menu_category mc ON mi.category_id = mc.id
-                                     WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, restaurant_id))
-                        item = c.fetchone()
-                        if not item:
-                            reply = f"找不到品項：{item_name}"
-                        else:
-                            menu_item_id = item[0]
-                            # 用戶註冊
-                            c.execute('INSERT OR IGNORE INTO user (line_user_id, display_name) VALUES (?, ?)', (user_id, display_name))
-                            c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
-                            user_row = c.fetchone()
-                            user_db_id = user_row[0]
-                            # 寫入點餐紀錄
-                            c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
-                                         VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
-                            conn.commit()
-                            reply = f"已為你登記：{item_name} x{quantity}（{meal_type}）"
+            parts = user_message.split()
+            if len(parts) >= 3:
+                item_name = parts[1]
+                try:
+                    quantity = int(parts[2])
+                except ValueError:
+                    reply = "請輸入正確的數量（例如：點餐 招牌雞腿便當 2）"
+                    conn.close()
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+                    return
+                # 取得今日餐廳
+                c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
+                r = c.fetchone()
+                if not r:
+                    reply = f"請先設定今日{meal_type}餐廳。"
                 else:
-                    reply = "請輸入：點餐 品項 數量（例如：點餐 招牌雞腿便當 2）"
+                    restaurant_id = r[0]
+                    # 找到品項
+                    c.execute('''SELECT mi.id FROM menu_item mi
+                                 JOIN menu_category mc ON mi.category_id = mc.id
+                                 WHERE mi.name=? AND mc.restaurant_id=?''', (item_name, restaurant_id))
+                    item = c.fetchone()
+                    if not item:
+                        reply = f"找不到品項：{item_name}"
+                    else:
+                        menu_item_id = item[0]
+                        # 用戶註冊
+                        c.execute('INSERT OR IGNORE INTO user (line_user_id, display_name) VALUES (?, ?)', (user_id, display_name))
+                        c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+                        user_row = c.fetchone()
+                        user_db_id = user_row[0]
+                        # 寫入點餐紀錄
+                        c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
+                                     VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
+                        conn.commit()
+                        reply = f"已為你登記：{item_name} x{quantity}（{meal_type}）"
+            else:
+                reply = "請輸入：點餐 品項 數量（例如：點餐 招牌雞腿便當 2）"
     # --- 統計（可指定餐別）---
     elif user_message.startswith("統計"):
         parts = user_message.split()
@@ -193,62 +189,10 @@ def handle_message(event):
             return
         else:
             reply = "目前沒有餐廳資料。"
-    # --- 查詢餐廳菜單（分頁）---
+    # --- 查詢餐廳菜單（一次顯示所有品項，含唯一編號）---
     elif user_message.startswith("菜單"):
-        import re
         parts = user_message.split()
-        # 解析 page 參數
-        page = 1
-        page_match = re.search(r'page=(\d+)', user_message)
-        if page_match:
-            page = int(page_match.group(1))
-            # 移除 page=... 參數
-            parts = [p for p in parts if not p.startswith('page=')]
-        PAGE_SIZE = 11
-        if len(parts) == 3:
-            # 「菜單 餐廳名稱 分類名稱」分頁顯示品項
-            restaurant_name = parts[1]
-            category_name = parts[2]
-            c.execute('SELECT id FROM restaurant WHERE name=?', (restaurant_name,))
-            r = c.fetchone()
-            if not r:
-                reply = f"找不到餐廳：{restaurant_name}"
-            else:
-                restaurant_id = r[0]
-                c.execute('SELECT id FROM menu_category WHERE restaurant_id=? AND name=?', (restaurant_id, category_name))
-                cat = c.fetchone()
-                if not cat:
-                    reply = f"找不到分類：{category_name}"
-                else:
-                    category_id = cat[0]
-                    c.execute('SELECT name, price FROM menu_item WHERE category_id=?', (category_id,))
-                    items = c.fetchall()
-                    if not items:
-                        reply = f"{restaurant_name}【{category_name}】尚無品項。"
-                    else:
-                        start = (page-1)*PAGE_SIZE
-                        end = start+PAGE_SIZE
-                        page_items = items[start:end]
-                        quick_reply_items = [
-                            QuickReplyButton(action=MessageAction(label=f"{item[0]} ${item[1]}", text=f"點餐 {item[0]} 1"))
-                            for item in page_items
-                        ]
-                        # 加入下一頁按鈕
-                        if end < len(items):
-                            quick_reply_items.append(
-                                QuickReplyButton(action=MessageAction(label="下一頁", text=f"菜單 {restaurant_name} {category_name} page={page+1}"))
-                            )
-                        line_bot_api.reply_message(
-                            event.reply_token,
-                            TextSendMessage(
-                                text=f"請選擇 {restaurant_name}【{category_name}】的品項（第{page}頁）：",
-                                quick_reply=QuickReply(items=quick_reply_items)
-                            )
-                        )
-                        conn.close()
-                        return
-        elif len(parts) == 2:
-            # 「菜單 餐廳名稱」分頁顯示分類
+        if len(parts) == 2:
             restaurant_name = parts[1]
             c.execute('SELECT id FROM restaurant WHERE name=?', (restaurant_name,))
             r = c.fetchone()
@@ -256,34 +200,98 @@ def handle_message(event):
                 reply = f"找不到餐廳：{restaurant_name}"
             else:
                 restaurant_id = r[0]
-                c.execute('SELECT name FROM menu_category WHERE restaurant_id=?', (restaurant_id,))
-                categories = c.fetchall()
-                if not categories:
+                # 取出所有分類及品項
+                c.execute('''SELECT mc.name as category, mi.id, mi.name, mi.price FROM menu_category mc
+                             JOIN menu_item mi ON mi.category_id = mc.id
+                             WHERE mc.restaurant_id=? ORDER BY mc.id, mi.id''', (restaurant_id,))
+                items = c.fetchall()
+                if not items:
                     reply = f"{restaurant_name} 尚無菜單資料。"
                 else:
-                    start = (page-1)*PAGE_SIZE
-                    end = start+PAGE_SIZE
-                    page_cats = categories[start:end]
-                    quick_reply_items = [
-                        QuickReplyButton(action=MessageAction(label=cat[0], text=f"菜單 {restaurant_name} {cat[0]}"))
-                        for cat in page_cats
-                    ]
-                    # 加入下一頁按鈕
-                    if end < len(categories):
-                        quick_reply_items.append(
-                            QuickReplyButton(action=MessageAction(label="下一頁", text=f"菜單 {restaurant_name} page={page+1}"))
-                        )
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(
-                            text=f"請選擇 {restaurant_name} 的分類（第{page}頁）：",
-                            quick_reply=QuickReply(items=quick_reply_items)
-                        )
-                    )
-                    conn.close()
-                    return
+                    lines = [f"{restaurant_name} 菜單："]
+                    last_cat = None
+                    for row in items:
+                        cat, iid, iname, price = row
+                        if cat != last_cat:
+                            lines.append(f"\n【{cat}】")
+                            last_cat = cat
+                        lines.append(f"[{iid}] {iname} ${price}")
+                    reply = "\n".join(lines)
         else:
             reply = "請輸入：菜單 餐廳名稱"
+        conn.close()
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+        return
+    # --- 點餐新流程：輸入品項編號，回覆份數選單 ---
+    # 用簡單 in-memory 狀態記錄 user_id -> menu_item_id
+    if not hasattr(app, 'pending_order'):
+        app.pending_order = {}
+
+    if user_message.isdigit():
+        menu_item_id = int(user_message)
+        c.execute('SELECT mi.name, mi.price, mc.restaurant_id, r.name as restaurant_name FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.id=?', (menu_item_id,))
+        item = c.fetchone()
+        if not item:
+            reply = f"找不到此品項編號：{menu_item_id}"
+            conn.close()
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+            return
+        # 記錄這個 user_id 的 pending menu_item_id
+        app.pending_order[user_id] = menu_item_id
+        # 回覆份數 quick reply
+        quick_reply_items = [QuickReplyButton(action=MessageAction(label=f"{i}份", text=str(i))) for i in range(1,6)]
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(
+                text=f"你選擇了 [{menu_item_id}] {item['name']} (${item['price']})\n請選擇需要幾份：",
+                quick_reply=QuickReply(items=quick_reply_items)
+            )
+        )
+        conn.close()
+        return
+
+    # --- 點餐新流程：收到份數，完成點餐 ---
+    if user_id in getattr(app, 'pending_order', {}):
+        if user_message in [str(i) for i in range(1,6)]:
+            menu_item_id = app.pending_order[user_id]
+            c.execute('SELECT mi.name, mc.restaurant_id, r.name as restaurant_name FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.id=?', (menu_item_id,))
+            item = c.fetchone()
+            if not item:
+                reply = "找不到此品項，請重新輸入編號。"
+            else:
+                # 判斷目前是哪一餐
+                if now < datetime.time(9, 0):
+                    meal_type = "中餐"
+                elif now < datetime.time(17, 0):
+                    meal_type = "晚餐"
+                else:
+                    meal_type = None
+                if not meal_type:
+                    reply = "目前已超過所有點餐截止時間。"
+                else:
+                    # 檢查今日餐廳
+                    c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
+                    r = c.fetchone()
+                    if not r or r[0] != item['restaurant_id']:
+                        reply = f"請先設定今日{meal_type}餐廳為 {item['restaurant_name']}。"
+                    else:
+                        # 用戶註冊
+                        c.execute('INSERT OR IGNORE INTO user (line_user_id, display_name) VALUES (?, ?)', (user_id, display_name))
+                        c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+                        user_row = c.fetchone()
+                        user_db_id = user_row[0]
+                        # 寫入點餐紀錄
+                        c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
+                                     VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, int(user_message)))
+                        conn.commit()
+                        reply = f"已為你登記：[{menu_item_id}] {item['name']} x{user_message}（{meal_type}）"
+                # 清除 pending 狀態
+                del app.pending_order[user_id]
+            else:
+                reply = "請選擇 1~5 份數，或重新輸入品項編號。"
+            conn.close()
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+            return
     else:
         reply = f"你說了：{user_message}"
     conn.close()
