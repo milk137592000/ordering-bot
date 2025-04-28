@@ -73,12 +73,13 @@ def import_all():
     clear_tables()
     menu_restaurants = parse_menu()
     drink_shops = parse_drink()
-    all_shops = menu_restaurants + drink_shops
+    # 插入餐廳
     conn = get_db()
     c = conn.cursor()
-    # 先插入所有餐廳/飲料店
-    for shop in all_shops:
-        c.execute('INSERT INTO restaurant (name) VALUES (?)', (shop['name'],))
+    for shop in menu_restaurants:
+        c.execute('INSERT INTO restaurant (name, type) VALUES (?, ?)', (shop['name'], '餐廳'))
+    for shop in drink_shops:
+        c.execute('INSERT INTO restaurant (name, type) VALUES (?, ?)', (shop['name'], '飲料店'))
     conn.commit()
     # 分配雙字母 code
     c.execute('SELECT id FROM restaurant ORDER BY id')
@@ -91,7 +92,18 @@ def import_all():
     c.execute('SELECT id, name, code FROM restaurant')
     shop_map = {row['name']: (row['id'], row['code']) for row in c.fetchall()}
     # 插入所有品項
-    for shop in all_shops:
+    for shop in menu_restaurants:
+        shop_id, shop_code = shop_map[shop['name']]
+        item_counter = 1
+        for cat in shop['categories']:
+            c.execute('INSERT INTO menu_category (restaurant_id, name) VALUES (?, ?)', (shop_id, cat['name']))
+            category_id = c.lastrowid
+            for item in cat['items']:
+                code = f"{shop_code}{str(item_counter).zfill(2)}"
+                c.execute('INSERT INTO menu_item (category_id, name, price, note, code) VALUES (?, ?, ?, ?, ?)',
+                          (category_id, item['name'], item['price'], item['note'], code))
+                item_counter += 1
+    for shop in drink_shops:
         shop_id, shop_code = shop_map[shop['name']]
         item_counter = 1
         for cat in shop['categories']:

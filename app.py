@@ -178,9 +178,9 @@ def handle_message(event):
             page = int(parts[1])
         page_size = 10
         offset = (page - 1) * page_size
-        c.execute('SELECT COUNT(*) FROM restaurant')
+        c.execute("SELECT COUNT(*) FROM restaurant WHERE type='餐廳'")
         total = c.fetchone()[0]
-        c.execute('SELECT name FROM restaurant ORDER BY id LIMIT ? OFFSET ?', (page_size, offset))
+        c.execute("SELECT name FROM restaurant WHERE type='餐廳' ORDER BY id LIMIT ? OFFSET ?", (page_size, offset))
         rows = c.fetchall()
         quick_reply_items = [
             QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
@@ -246,9 +246,9 @@ def handle_message(event):
             page = int(parts[1])
         page_size = 10
         offset = (page - 1) * page_size
-        c.execute("SELECT COUNT(*) FROM restaurant WHERE name LIKE '%飲料%' OR name LIKE '%茶%'")
+        c.execute("SELECT COUNT(*) FROM restaurant WHERE type='飲料店'")
         total = c.fetchone()[0]
-        c.execute("SELECT name FROM restaurant WHERE name LIKE '%飲料%' OR name LIKE '%茶%' ORDER BY id LIMIT ? OFFSET ?", (page_size, offset))
+        c.execute("SELECT name FROM restaurant WHERE type='飲料店' ORDER BY id LIMIT ? OFFSET ?", (page_size, offset))
         rows = c.fetchall()
         quick_reply_items = [
             QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
@@ -279,6 +279,44 @@ def handle_message(event):
     # 支援 code 或 id
     menu_item_id = None
     menu_item_code = None
+    # 只有在 pending_order 狀態下才允許數字作為份數
+    if user_id in app.pending_order and isinstance(app.pending_order[user_id], int):
+        # 進入份數 quick reply 狀態
+        if user_message.isdigit() and user_message in [str(i) for i in range(1,6)]:
+            quantity = int(user_message)
+            menu_item_id = app.pending_order[user_id]
+            # 判斷目前是哪一餐
+            if now < datetime.time(9, 0):
+                meal_type = "中餐"
+            elif now < datetime.time(17, 0):
+                meal_type = "晚餐"
+            else:
+                meal_type = None
+            if not meal_type:
+                reply = "目前已超過所有點餐截止時間。"
+            else:
+                # 檢查今日餐廳
+                c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
+                r = c.fetchone()
+                if not r:
+                    reply = f"請先設定今日{meal_type}餐廳。"
+                else:
+                    restaurant_id = r[0]
+                    # 用戶註冊
+                    c.execute('INSERT OR IGNORE INTO user (line_user_id, display_name) VALUES (?, ?)', (user_id, display_name))
+                    c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+                    user_row = c.fetchone()
+                    user_db_id = user_row[0]
+                    # 寫入點餐紀錄
+                    c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
+                                 VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
+                    conn.commit()
+                    reply = f"已為你登記：[{menu_item_id}] x{quantity}（{meal_type}）"
+            del app.pending_order[user_id]
+            conn.close()
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+            return
+    # 其他情況才允許輸入 code 或 id 查詢品項
     if user_message.isdigit():
         menu_item_id = int(user_message)
     elif len(user_message) == 4 and user_message[:2].isalpha() and user_message[2:].isdigit():

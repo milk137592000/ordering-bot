@@ -15,7 +15,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS restaurant (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
-            code TEXT
+            code TEXT,
+            type TEXT DEFAULT '餐廳'
         )
     ''')
     # 菜單分類表
