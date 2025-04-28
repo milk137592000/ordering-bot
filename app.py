@@ -308,105 +308,14 @@ def handle_message(event):
     if not hasattr(app, 'pending_order'):
         app.pending_order = {}
 
-    # 支援 code 或 id
-    menu_item_id = None
-    menu_item_code = None
-    # 只有在 pending_order 狀態下才允許數字作為份數
-    if user_id in app.pending_order and (
-        isinstance(app.pending_order[user_id], int) or isinstance(app.pending_order[user_id], dict)):
-        pass  # 下面流程照舊
-    elif user_message.isdigit():
-        reply = "請輸入正確的品項編號或 code（如 AA01）"
-        conn.close()
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-        return
-    elif len(user_message) == 4 and user_message[:2].isalpha() and user_message[2:].isdigit():
-        menu_item_code = user_message.upper()
-    if menu_item_id or menu_item_code:
-        if menu_item_code:
-            c.execute('SELECT mi.id, mi.name, mi.price, mc.restaurant_id, r.name as restaurant_name FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.code=?', (menu_item_code,))
-        else:
-            c.execute('SELECT mi.id, mi.name, mi.price, mc.restaurant_id, r.name as restaurant_name FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.id=?', (menu_item_id,))
-        item = c.fetchone()
-        if not item:
-            reply = f"找不到此品項編號：{user_message}"
-            conn.close()
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-            return
-        # 判斷是否為飲料店
-        c.execute("SELECT name FROM restaurant WHERE id=?", (item[3],))
-        rest_name = c.fetchone()[0]
-        if ("飲料" in rest_name) or ("茶" in rest_name):
-            # 飲料流程：先記錄品項，回覆甜度 quick reply
-            app.pending_order[user_id] = {"menu_item_id": item[0], "step": "sweetness", "shop": rest_name}
-            # 依據店家顯示甜度 quick reply
-            sweetness_opts = DRINK_SHOP_OPTIONS.get(rest_name, {}).get('sweetness', ['正常', '少糖', '半糖', '微糖', '無糖'])
-            quick_reply_items = [QuickReplyButton(action=MessageAction(label=opt, text=f"甜度{opt}")) for opt in sweetness_opts]
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(
-                    text=f"你選擇了 [{user_message}] {item[1]} (${item[2]})\n請選擇甜度：",
-                    quick_reply=QuickReply(items=quick_reply_items)
-                )
-            )
-            conn.close()
-            return
-        else:
-            # 一般餐點流程：直接進入份數 quick reply
-            app.pending_order[user_id] = item[0]
-            quick_reply_items = [QuickReplyButton(action=MessageAction(label=f"{i}份", text=str(i))) for i in range(1,6)]
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(
-                    text=f"你選擇了 [{item[1]}] {item[2]} (${item[3]})\n請選擇需要幾份：",
-                    quick_reply=QuickReply(items=quick_reply_items)
-                )
-            )
-            conn.close()
-            return
-
-    # --- 飲料點餐流程：甜度→冰塊→數量 ---
-    if user_id in getattr(app, 'pending_order', {}) and isinstance(app.pending_order[user_id], dict):
+    # --- quick reply 狀態優先處理 ---
+    if user_id in getattr(app, 'pending_order', {}):
         state = app.pending_order[user_id]
-        if state.get("step") == "sweetness" and user_message.startswith("甜度"):
-            sweetness = user_message.replace("甜度", "")
-            state["sweetness"] = sweetness
-            state["step"] = "ice"
-            shop = state.get("shop")
-            ice_opts = DRINK_SHOP_OPTIONS.get(shop, {}).get('ice', ['正常', '少冰', '微冰', '去冰', '熱'])
-            quick_reply_items = [QuickReplyButton(action=MessageAction(label=opt, text=f"冰塊{opt}")) for opt in ice_opts]
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(
-                    text=f"請選擇冰塊：",
-                    quick_reply=QuickReply(items=quick_reply_items)
-                )
-            )
-            return
-        elif state.get("step") == "ice" and user_message.startswith("冰塊"):
-            ice = user_message.replace("冰塊", "")
-            state["ice"] = ice
-            state["step"] = "qty"
-            quick_reply_items = [QuickReplyButton(action=MessageAction(label=f"{i}杯", text=str(i))) for i in range(1,6)]
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(
-                    text=f"請選擇數量：",
-                    quick_reply=QuickReply(items=quick_reply_items)
-                )
-            )
-            return
-        elif state.get("step") == "qty" and user_message in [str(i) for i in range(1,6)]:
-            quantity = int(user_message)
-            menu_item_id = state["menu_item_id"]
-            sweetness = state["sweetness"]
-            ice = state["ice"]
-            # 查詢品項資訊
-            c.execute('SELECT mi.name, mc.restaurant_id, r.name as restaurant_name FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.id=?', (menu_item_id,))
-            item = c.fetchone()
-            if not item:
-                reply = "找不到此品項，請重新輸入編號。"
-            else:
+        # 餐點流程（int）
+        if isinstance(state, int):
+            if user_message.isdigit() and user_message in [str(i) for i in range(1,6)]:
+                quantity = int(user_message)
+                menu_item_id = state
                 # 判斷目前是哪一餐
                 if now < datetime.time(9, 0):
                     meal_type = "中餐"
@@ -420,26 +329,98 @@ def handle_message(event):
                     # 檢查今日餐廳
                     c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
                     r = c.fetchone()
-                    if not r or r[0] != item['restaurant_id']:
-                        reply = f"請先設定今日{meal_type}餐廳為 {item['restaurant_name']}。"
+                    if not r:
+                        reply = f"請先設定今日{meal_type}餐廳。"
                     else:
+                        restaurant_id = r[0]
                         # 用戶註冊
                         c.execute('INSERT OR IGNORE INTO user (line_user_id, display_name) VALUES (?, ?)', (user_id, display_name))
                         c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
                         user_row = c.fetchone()
                         user_db_id = user_row[0]
-                        # 寫入點餐紀錄（甜度冰塊寫進 note 欄）
-                        note = f"甜度:{sweetness} 冰塊:{ice}"
+                        # 寫入點餐紀錄
                         c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
                                      VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
-                        # 也可寫進 menu_item.note 或 order_record 增加 note 欄（如需永久記錄）
                         conn.commit()
-                        reply = f"已為你登記：[{menu_item_id}] {item['name']} 甜度:{sweetness} 冰塊:{ice} x{quantity}（{meal_type}）"
+                        reply = f"已為你登記：[{menu_item_id}] x{quantity}（{meal_type}）"
+                del app.pending_order[user_id]
+                conn.close()
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+                return
+        # 飲料流程（dict）
+        elif isinstance(state, dict):
+            if state.get("step") == "sweetness" and user_message.startswith("甜度"):
+                sweetness = user_message.replace("甜度", "")
+                state["sweetness"] = sweetness
+                state["step"] = "ice"
+                shop = state.get("shop")
+                ice_opts = DRINK_SHOP_OPTIONS.get(shop, {}).get('ice', ['正常', '少冰', '微冰', '去冰', '熱'])
+                quick_reply_items = [QuickReplyButton(action=MessageAction(label=opt, text=f"冰塊{opt}")) for opt in ice_opts]
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(
+                        text=f"請選擇冰塊：",
+                        quick_reply=QuickReply(items=quick_reply_items)
+                    )
+                )
+                return
+            elif state.get("step") == "ice" and user_message.startswith("冰塊"):
+                ice = user_message.replace("冰塊", "")
+                state["ice"] = ice
+                state["step"] = "qty"
+                quick_reply_items = [QuickReplyButton(action=MessageAction(label=f"{i}杯", text=str(i))) for i in range(1,6)]
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(
+                        text=f"請選擇數量：",
+                        quick_reply=QuickReply(items=quick_reply_items)
+                    )
+                )
+                return
+            elif state.get("step") == "qty" and user_message in [str(i) for i in range(1,6)]:
+                quantity = int(user_message)
+                menu_item_id = state["menu_item_id"]
+                sweetness = state["sweetness"]
+                ice = state["ice"]
+                # 查詢品項資訊
+                c.execute('SELECT mi.name, mc.restaurant_id, r.name as restaurant_name FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.id=?', (menu_item_id,))
+                item = c.fetchone()
+                if not item:
+                    reply = "找不到此品項，請重新輸入編號。"
+                else:
+                    # 判斷目前是哪一餐
+                    if now < datetime.time(9, 0):
+                        meal_type = "中餐"
+                    elif now < datetime.time(17, 0):
+                        meal_type = "晚餐"
+                    else:
+                        meal_type = None
+                    if not meal_type:
+                        reply = "目前已超過所有點餐截止時間。"
+                    else:
+                        # 檢查今日餐廳
+                        c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND meal_type=?', (today, meal_type))
+                        r = c.fetchone()
+                        if not r or r[0] != item['restaurant_id']:
+                            reply = f"請先設定今日{meal_type}餐廳為 {item['restaurant_name']}。"
+                        else:
+                            # 用戶註冊
+                            c.execute('INSERT OR IGNORE INTO user (line_user_id, display_name) VALUES (?, ?)', (user_id, display_name))
+                            c.execute('SELECT id FROM user WHERE line_user_id=?', (user_id,))
+                            user_row = c.fetchone()
+                            user_db_id = user_row[0]
+                            # 寫入點餐紀錄（甜度冰塊寫進 note 欄）
+                            note = f"甜度:{sweetness} 冰塊:{ice}"
+                            c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
+                                         VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
+                            # 也可寫進 menu_item.note 或 order_record 增加 note 欄（如需永久記錄）
+                            conn.commit()
+                            reply = f"已為你登記：[{menu_item_id}] {item['name']} 甜度:{sweetness} 冰塊:{ice} x{quantity}（{meal_type}）"
                 # 清除 pending 狀態
                 del app.pending_order[user_id]
-            conn.close()
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-            return
+                conn.close()
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+                return
     else:
         reply = f"你說了：{user_message}"
     conn.close()
