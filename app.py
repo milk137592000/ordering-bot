@@ -316,7 +316,7 @@ def handle_message(event):
                 reply = "目前沒有餐廳資料。"
             else:
                 choice = random.choice(rows)[0]
-                reply = f"推薦你吃：{choice}"
+                reply = f"今天{meal_type}就決定吃：{choice}"
         else:
             reply = "請輸入：隨便吃 午餐/晚餐"
         conn.close()
@@ -333,7 +333,7 @@ def handle_message(event):
                 reply = "目前沒有飲料店資料。"
             else:
                 choice = random.choice(rows)[0]
-                reply = f"推薦你喝：{choice}"
+                reply = f"今天{meal_type}就決定喝：{choice}"
         else:
             reply = "請輸入：隨便喝 午餐/晚餐"
         conn.close()
