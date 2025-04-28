@@ -421,6 +421,46 @@ def handle_message(event):
                 conn.close()
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
                 return
+    # --- 處理 4 碼品項 code ---
+    if len(user_message) == 4 and user_message[:2].isalpha() and user_message[2:].isdigit():
+        menu_item_code = user_message.upper()
+        c.execute('SELECT mi.id, mi.name, mi.price, mc.restaurant_id, r.name as restaurant_name FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.code=?', (menu_item_code,))
+        item = c.fetchone()
+        if not item:
+            reply = f"找不到此品項編號：{user_message}"
+            conn.close()
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+            return
+        # 判斷是否為飲料店
+        c.execute("SELECT name FROM restaurant WHERE id=?", (item[3],))
+        rest_name = c.fetchone()[0]
+        if ("飲料" in rest_name) or ("茶" in rest_name):
+            # 飲料流程：先記錄品項，回覆甜度 quick reply
+            app.pending_order[user_id] = {"menu_item_id": item[0], "step": "sweetness", "shop": rest_name}
+            sweetness_opts = DRINK_SHOP_OPTIONS.get(rest_name, {}).get('sweetness', ['正常', '少糖', '半糖', '微糖', '無糖'])
+            quick_reply_items = [QuickReplyButton(action=MessageAction(label=opt, text=f"甜度{opt}")) for opt in sweetness_opts]
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text=f"你選擇了 [{user_message}] {item[1]} (${item[2]})\n請選擇甜度：",
+                    quick_reply=QuickReply(items=quick_reply_items)
+                )
+            )
+            conn.close()
+            return
+        else:
+            # 一般餐點流程：直接進入份數 quick reply
+            app.pending_order[user_id] = item[0]
+            quick_reply_items = [QuickReplyButton(action=MessageAction(label=f"{i}份", text=str(i))) for i in range(1,6)]
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text=f"你選擇了 [{item[1]}] {item[2]} (${item[3]})\n請選擇需要幾份：",
+                    quick_reply=QuickReply(items=quick_reply_items)
+                )
+            )
+            conn.close()
+            return
     else:
         reply = f"你說了：{user_message}"
     conn.close()
