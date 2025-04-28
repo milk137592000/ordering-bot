@@ -14,7 +14,8 @@ def init_db():
     c.execute('''
         CREATE TABLE IF NOT EXISTS restaurant (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE
+            name TEXT NOT NULL UNIQUE,
+            code TEXT
         )
     ''')
     # 菜單分類表
@@ -34,6 +35,7 @@ def init_db():
             name TEXT NOT NULL,
             price INTEGER NOT NULL,
             note TEXT,
+            code TEXT,
             FOREIGN KEY (category_id) REFERENCES menu_category(id)
         )
     ''')
