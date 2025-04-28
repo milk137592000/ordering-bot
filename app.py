@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from models import get_db
 import datetime
 from models import init_db
+import random
 init_db()
 
 load_dotenv()
@@ -304,6 +305,100 @@ def handle_message(event):
             return
         else:
             reply = "目前沒有飲料店資料。"
+    # --- 隨便吃 午/晚餐 ---
+    if user_message.startswith("隨便吃"):
+        parts = user_message.split()
+        if len(parts) == 2 and parts[1] in ["午餐", "晚餐"]:
+            meal_type = parts[1]
+            c.execute("SELECT name FROM restaurant WHERE type='餐廳'")
+            rows = c.fetchall()
+            if not rows:
+                reply = "目前沒有餐廳資料。"
+            else:
+                choice = random.choice(rows)[0]
+                reply = f"推薦你吃：{choice}"
+        else:
+            reply = "請輸入：隨便吃 午餐/晚餐"
+        conn.close()
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+        return
+    # --- 隨便喝 午/晚餐 ---
+    if user_message.startswith("隨便喝"):
+        parts = user_message.split()
+        if len(parts) == 2 and parts[1] in ["午餐", "晚餐"]:
+            meal_type = parts[1]
+            c.execute("SELECT name FROM restaurant WHERE type='飲料店'")
+            rows = c.fetchall()
+            if not rows:
+                reply = "目前沒有飲料店資料。"
+            else:
+                choice = random.choice(rows)[0]
+                reply = f"推薦你喝：{choice}"
+        else:
+            reply = "請輸入：隨便喝 午餐/晚餐"
+        conn.close()
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+        return
+    # --- 吃啥 ---
+    if user_message == "吃啥":
+        # 查詢今日餐廳
+        c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND (meal_type=? OR meal_type=?)', (today, "中餐", "晚餐"))
+        r = c.fetchone()
+        if not r:
+            reply = "請先設定今日餐廳。"
+        else:
+            restaurant_id = r[0]
+            c.execute('SELECT name FROM restaurant WHERE id=?', (restaurant_id,))
+            restaurant_name = c.fetchone()[0]
+            c.execute('''SELECT mc.name as category, mi.code, mi.name, mi.price FROM menu_category mc
+                         JOIN menu_item mi ON mi.category_id = mc.id
+                         WHERE mc.restaurant_id=? ORDER BY mc.id, mi.id''', (restaurant_id,))
+            items = c.fetchall()
+            if not items:
+                reply = f"{restaurant_name} 尚無菜單資料。"
+            else:
+                lines = [f"{restaurant_name} 菜單："]
+                last_cat = None
+                for row in items:
+                    cat, code, iname, price = row
+                    if cat != last_cat:
+                        lines.append(f"\n【{cat}】")
+                        last_cat = cat
+                    lines.append(f"[{code}] {iname} ${price}")
+                reply = "\n".join(lines)
+        conn.close()
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+        return
+    # --- 喝啥 ---
+    if user_message == "喝啥":
+        # 查詢今日飲料店
+        c.execute('SELECT restaurant_id FROM today_restaurant WHERE date=? AND (meal_type=? OR meal_type=?)', (today, "中餐", "晚餐"))
+        r = c.fetchone()
+        if not r:
+            reply = "請先設定今日飲料店。"
+        else:
+            restaurant_id = r[0]
+            c.execute('SELECT name FROM restaurant WHERE id=?', (restaurant_id,))
+            restaurant_name = c.fetchone()[0]
+            c.execute('''SELECT mc.name as category, mi.code, mi.name, mi.price FROM menu_category mc
+                         JOIN menu_item mi ON mi.category_id = mc.id
+                         WHERE mc.restaurant_id=? ORDER BY mc.id, mi.id''', (restaurant_id,))
+            items = c.fetchall()
+            if not items:
+                reply = f"{restaurant_name} 尚無菜單資料。"
+            else:
+                lines = [f"{restaurant_name} 菜單："]
+                last_cat = None
+                for row in items:
+                    cat, code, iname, price = row
+                    if cat != last_cat:
+                        lines.append(f"\n【{cat}】")
+                        last_cat = cat
+                    lines.append(f"[{code}] {iname} ${price}")
+                reply = "\n".join(lines)
+        conn.close()
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+        return
     # --- 點餐新流程：輸入品項編號（code 或 id），回覆 quick reply ---
     if not hasattr(app, 'pending_order'):
         app.pending_order = {}
@@ -353,9 +448,8 @@ def handle_message(event):
                 sweetness = user_message.replace("甜度", "")
                 state["sweetness"] = sweetness
                 state["step"] = "ice"
-                shop = state.get("shop")
-                ice_opts = DRINK_SHOP_OPTIONS.get(shop, {}).get('ice', ['正常', '少冰', '微冰', '去冰', '熱'])
-                quick_reply_items = [QuickReplyButton(action=MessageAction(label=opt, text=f"冰塊{opt}")) for opt in ice_opts]
+                opts = [0,1,3,5,7]
+                quick_reply_items = [QuickReplyButton(action=MessageAction(label=str(opt), text=f"冰塊{opt}")) for opt in opts]
                 line_bot_api.reply_message(
                     event.reply_token,
                     TextSendMessage(
@@ -437,8 +531,9 @@ def handle_message(event):
         if ("飲料" in rest_name) or ("茶" in rest_name):
             # 飲料流程：先記錄品項，回覆甜度 quick reply
             app.pending_order[user_id] = {"menu_item_id": item[0], "step": "sweetness", "shop": rest_name}
-            sweetness_opts = DRINK_SHOP_OPTIONS.get(rest_name, {}).get('sweetness', ['正常', '少糖', '半糖', '微糖', '無糖'])
-            quick_reply_items = [QuickReplyButton(action=MessageAction(label=opt, text=f"甜度{opt}")) for opt in sweetness_opts]
+            # 統一甜度冰塊選單為 0,1,3,5,7
+            opts = [0,1,3,5,7]
+            quick_reply_items = [QuickReplyButton(action=MessageAction(label=str(opt), text=f"甜度{opt}")) for opt in opts]
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(
