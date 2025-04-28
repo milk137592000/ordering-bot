@@ -170,18 +170,33 @@ def handle_message(event):
                 lines.append(f"\n總金額：${total_sum}")
                 reply = "\n".join(lines)
     # --- 查詢餐廳清單 ---
-    elif user_message in ["餐廳", "查詢餐廳"]:
-        c.execute('SELECT name FROM restaurant ORDER BY id')
+    elif user_message.startswith("餐廳") or user_message.startswith("查詢餐廳"):
+        # 解析分頁
+        parts = user_message.split()
+        page = 1
+        if len(parts) == 2 and parts[1].isdigit():
+            page = int(parts[1])
+        page_size = 10
+        offset = (page - 1) * page_size
+        c.execute('SELECT COUNT(*) FROM restaurant')
+        total = c.fetchone()[0]
+        c.execute('SELECT name FROM restaurant ORDER BY id LIMIT ? OFFSET ?', (page_size, offset))
         rows = c.fetchall()
-        if rows:
-            quick_reply_items = [
-                QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
-                for row in rows
-            ]
+        quick_reply_items = [
+            QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
+            for row in rows
+        ]
+        # 分頁按鈕
+        max_page = (total + page_size - 1) // page_size
+        if page > 1:
+            quick_reply_items.append(QuickReplyButton(action=MessageAction(label="上一頁", text=f"餐廳 {page-1}")))
+        if page < max_page:
+            quick_reply_items.append(QuickReplyButton(action=MessageAction(label="下一頁", text=f"餐廳 {page+1}")))
+        if quick_reply_items:
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(
-                    text="請選擇餐廳：",
+                    text=f"請選擇餐廳（第{page}/{max_page}頁）：",
                     quick_reply=QuickReply(items=quick_reply_items)
                 )
             )
@@ -223,19 +238,33 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
         return
     # --- 查詢飲料店清單 ---
-    elif user_message in ["飲料", "查詢飲料店"]:
-        # 只顯示名稱含「飲料」或「茶」的店家
-        c.execute("SELECT name FROM restaurant WHERE name LIKE '%飲料%' OR name LIKE '%茶%' ORDER BY id")
+    elif user_message.startswith("飲料") or user_message.startswith("查詢飲料店"):
+        # 解析分頁
+        parts = user_message.split()
+        page = 1
+        if len(parts) == 2 and parts[1].isdigit():
+            page = int(parts[1])
+        page_size = 10
+        offset = (page - 1) * page_size
+        c.execute("SELECT COUNT(*) FROM restaurant WHERE name LIKE '%飲料%' OR name LIKE '%茶%'")
+        total = c.fetchone()[0]
+        c.execute("SELECT name FROM restaurant WHERE name LIKE '%飲料%' OR name LIKE '%茶%' ORDER BY id LIMIT ? OFFSET ?", (page_size, offset))
         rows = c.fetchall()
-        if rows:
-            quick_reply_items = [
-                QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
-                for row in rows
-            ]
+        quick_reply_items = [
+            QuickReplyButton(action=MessageAction(label=row[0], text=f"菜單 {row[0]}"))
+            for row in rows
+        ]
+        # 分頁按鈕
+        max_page = (total + page_size - 1) // page_size
+        if page > 1:
+            quick_reply_items.append(QuickReplyButton(action=MessageAction(label="上一頁", text=f"飲料 {page-1}")))
+        if page < max_page:
+            quick_reply_items.append(QuickReplyButton(action=MessageAction(label="下一頁", text=f"飲料 {page+1}")))
+        if quick_reply_items:
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(
-                    text="請選擇飲料店：",
+                    text=f"請選擇飲料店（第{page}/{max_page}頁）：",
                     quick_reply=QuickReply(items=quick_reply_items)
                 )
             )
