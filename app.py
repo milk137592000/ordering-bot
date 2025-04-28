@@ -20,6 +20,38 @@ CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(CHANNEL_SECRET)
 
+# --- 飲料店甜度、冰塊選項 ---
+DRINK_SHOP_OPTIONS = {
+    '鶴茶樓': {
+        'sweetness': ['100%', '70%', '50%', '30%', '0%'],
+        'ice': ['100%', '70%', '50%', '30%', '0%', '熱飲']
+    },
+    '50嵐': {
+        'sweetness': ['正常', '少糖', '半糖', '微糖', '無糖'],
+        'ice': ['正常', '少冰', '微冰', '去冰', '溫', '熱']
+    },
+    '麻古飲料店': {
+        'sweetness': ['正常', '少糖', '半糖', '微糖', '無糖'],
+        'ice': ['正常', '少冰', '微冰', '去冰', '熱']
+    },
+    '水巷茶弄': {
+        'sweetness': ['正常', '少糖', '半糖', '微糖', '無糖'],
+        'ice': ['正常', '少冰', '半冰', '微冰', '去冰', '熱']
+    },
+    '三分春色': {
+        'sweetness': ['全糖', '八分', '五分', '三分', '無糖'],
+        'ice': ['正常冰', '少冰', '微冰', '去冰', '熱飲']
+    },
+    '清原': {
+        'sweetness': ['正常', '少糖', '半糖', '微糖', '無糖'],
+        'ice': ['正常冰', '少冰', '半冰', '微冰', '去冰']
+    },
+    '得正': {
+        'sweetness': ['正常', '少糖', '半糖', '微糖', '無糖'],
+        'ice': ['正常', '少冰', '微冰', '去冰', '熱']
+    },
+}
+
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
@@ -337,8 +369,10 @@ def handle_message(event):
         rest_name = c.fetchone()[0]
         if ("飲料" in rest_name) or ("茶" in rest_name):
             # 飲料流程：先記錄品項，回覆甜度 quick reply
-            app.pending_order[user_id] = {"menu_item_id": item[0], "step": "sweetness"}
-            quick_reply_items = [QuickReplyButton(action=MessageAction(label=str(i), text=f"甜度{i}")) for i in [0,1,3,5,7]]
+            app.pending_order[user_id] = {"menu_item_id": item[0], "step": "sweetness", "shop": rest_name}
+            # 依據店家顯示甜度 quick reply
+            sweetness_opts = DRINK_SHOP_OPTIONS.get(rest_name, {}).get('sweetness', ['正常', '少糖', '半糖', '微糖', '無糖'])
+            quick_reply_items = [QuickReplyButton(action=MessageAction(label=opt, text=f"甜度{opt}")) for opt in sweetness_opts]
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(
@@ -369,7 +403,9 @@ def handle_message(event):
             sweetness = user_message.replace("甜度", "")
             state["sweetness"] = sweetness
             state["step"] = "ice"
-            quick_reply_items = [QuickReplyButton(action=MessageAction(label=str(i), text=f"冰塊{i}")) for i in [0,1,3,5,7]]
+            shop = state.get("shop")
+            ice_opts = DRINK_SHOP_OPTIONS.get(shop, {}).get('ice', ['正常', '少冰', '微冰', '去冰', '熱'])
+            quick_reply_items = [QuickReplyButton(action=MessageAction(label=opt, text=f"冰塊{opt}")) for opt in ice_opts]
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(
