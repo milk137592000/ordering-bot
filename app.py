@@ -311,22 +311,15 @@ def handle_message(event):
     # 支援 code 或 id
     menu_item_id = None
     menu_item_code = None
-    # 只有非飲料店時才允許數字查詢 menu_item_id
-    if user_message.isdigit():
-        # 查詢這個 id 是否為飲料店品項
-        c.execute('''SELECT mi.id, mc.restaurant_id, r.name FROM menu_item mi
-                     JOIN menu_category mc ON mi.category_id=mc.id
-                     JOIN restaurant r ON mc.restaurant_id=r.id
-                     WHERE mi.id=?''', (int(user_message),))
-        row = c.fetchone()
-        if row and (("飲料" in row[2]) or ("茶" in row[2])):
-            # 飲料店品項，必須輸入 code
-            reply = "飲料請輸入品項編號（如 AA01），不可直接輸入數字。"
-            conn.close()
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-            return
-        else:
-            menu_item_id = int(user_message)
+    # 只有在 pending_order 狀態下才允許數字作為份數
+    if user_id in app.pending_order and (
+        isinstance(app.pending_order[user_id], int) or isinstance(app.pending_order[user_id], dict)):
+        pass  # 下面流程照舊
+    elif user_message.isdigit():
+        reply = "請輸入正確的品項編號或 code（如 AA01）"
+        conn.close()
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+        return
     elif len(user_message) == 4 and user_message[:2].isalpha() and user_message[2:].isdigit():
         menu_item_code = user_message.upper()
     if menu_item_id or menu_item_code:
