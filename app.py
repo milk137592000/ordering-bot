@@ -443,12 +443,12 @@ def handle_message(event):
                         # 寫入點餐紀錄
                         c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
                                      VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
-                        # 查詢品項名稱與 code
-                        c.execute('SELECT name, code FROM menu_item WHERE id=?', (menu_item_id,))
+                        # 查詢品項名稱、code、價格
+                        c.execute('SELECT name, code, price FROM menu_item WHERE id=?', (menu_item_id,))
                         item_info = c.fetchone()
                         if item_info:
-                            item_name, item_code = item_info
-                            reply = f"已為你登記：[{item_code}] {item_name} x{quantity}（{meal_type}）"
+                            item_name, item_code, item_price = item_info
+                            reply = f"已為你登記：[{item_code}] {item_name} ${item_price} x{quantity}（{meal_type}）"
                         else:
                             reply = f"已為你登記：x{quantity}（{meal_type}）"
                 del app.pending_order[user_id]
@@ -531,7 +531,7 @@ def handle_message(event):
     # --- 處理 4 碼品項 code ---
     if len(user_message) == 4 and user_message[:2].isalpha() and user_message[2:].isdigit():
         menu_item_code = user_message.upper()
-        c.execute('SELECT mi.id, mi.name, mi.price, mc.restaurant_id, r.name as restaurant_name FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.code=?', (menu_item_code,))
+        c.execute('SELECT mi.id, mi.name, mi.price, mc.restaurant_id, r.name as restaurant_name, mi.code FROM menu_item mi JOIN menu_category mc ON mi.category_id=mc.id JOIN restaurant r ON mc.restaurant_id=r.id WHERE mi.code=?', (menu_item_code,))
         item = c.fetchone()
         if not item:
             reply = f"找不到此品項編號：{user_message}"
@@ -550,7 +550,7 @@ def handle_message(event):
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(
-                    text=f"你選擇了 [{user_message}] {item[1]} (${item[2]})\n請選擇甜度：",
+                    text=f"你選擇了 [{item[5]}] {item[1]} (${item[2]})\n請選擇甜度：",
                     quick_reply=QuickReply(items=quick_reply_items)
                 )
             )
@@ -563,12 +563,13 @@ def handle_message(event):
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(
-                    text=f"你選擇了 [{item[1]}] {item[2]} (${item[3]})\n請選擇需要幾份：",
+                    text=f"你選擇了 [{item[5]}] {item[1]} (${item[2]})\n請選擇需要幾份：",
                     quick_reply=QuickReply(items=quick_reply_items)
                 )
             )
             conn.close()
             return
+    # --- 其他訊息原樣回覆 ---
     else:
         reply = f"你說了：{user_message}"
     conn.close()
