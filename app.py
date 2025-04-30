@@ -385,24 +385,30 @@ def handle_message(event):
             reply = "請先設定今日飲料店。"
         else:
             restaurant_id = r[0]
-            c.execute('SELECT name FROM restaurant WHERE id=?', (restaurant_id,))
-            restaurant_name = c.fetchone()[0]
-            c.execute('''SELECT mc.name as category, mi.code, mi.name, mi.price FROM menu_category mc
-                         JOIN menu_item mi ON mi.category_id = mc.id
-                         WHERE mc.restaurant_id=? ORDER BY mc.id, mi.id''', (restaurant_id,))
-            items = c.fetchall()
-            if not items:
-                reply = f"{restaurant_name} 尚無菜單資料。"
+            # 檢查這個 id 是否為飲料店
+            c.execute('SELECT name FROM restaurant WHERE id=? AND type=?', (restaurant_id, '飲料店'))
+            rest = c.fetchone()
+            if not rest:
+                reply = "今日尚未設定飲料店。"
             else:
-                lines = [f"{restaurant_name} 菜單："]
-                last_cat = None
-                for row in items:
-                    cat, code, iname, price = row
-                    if cat != last_cat:
-                        lines.append(f"\n【{cat}】")
-                        last_cat = cat
-                    lines.append(f"[{code}] {iname} ${price}")
-                reply = "\n".join(lines)
+                restaurant_name = rest[0]
+                # 查詢飲料店菜單
+                c.execute('''SELECT mc.name as category, mi.code, mi.name, mi.price FROM menu_category mc
+                             JOIN menu_item mi ON mi.category_id = mc.id
+                             WHERE mc.restaurant_id=? ORDER BY mc.id, mi.id''', (restaurant_id,))
+                items = c.fetchall()
+                if not items:
+                    reply = f"{restaurant_name} 尚無菜單資料。"
+                else:
+                    lines = [f"{restaurant_name} 菜單："]
+                    last_cat = None
+                    for row in items:
+                        cat, code, iname, price = row
+                        if cat != last_cat:
+                            lines.append(f"\n【{cat}】")
+                            last_cat = cat
+                        lines.append(f"[{code}] {iname} ${price}")
+                    reply = "\n".join(lines)
         conn.close()
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
         return
