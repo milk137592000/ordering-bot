@@ -181,8 +181,9 @@ def handle_message(event):
                          WHERE orr.date=? AND orr.meal_type=? AND mc.restaurant_id=?
                          ORDER BY u.display_name''', (today, meal_type, restaurant_id))
             rows = c.fetchall()
+            lines = [f"今日{meal_type} {restaurant_name} 點餐統計："]
             if not rows:
-                reply = f"今日{meal_type} {restaurant_name} 尚無點餐紀錄。"
+                lines.append("尚無點餐紀錄。")
             else:
                 summary = {}
                 total_sum = 0
@@ -196,12 +197,11 @@ def handle_message(event):
                     if name not in summary:
                         summary[name] = []
                     summary[name].append(f"{item} x{qty} = ${subtotal}")
-                lines = [f"今日{meal_type} {restaurant_name} 點餐統計："]
                 for name, items in summary.items():
                     lines.append(f"{name}：")
                     lines.extend([f"  {i}" for i in items])
                 lines.append(f"\n總金額：${total_sum}")
-                reply = "\n".join(lines)
+            reply = "\n".join(lines)
     # --- 查詢餐廳清單 ---
     elif user_message.startswith("餐廳") or user_message.startswith("查詢餐廳"):
         # 解析分頁
@@ -443,8 +443,14 @@ def handle_message(event):
                         # 寫入點餐紀錄
                         c.execute('''INSERT INTO order_record (user_id, date, meal_type, menu_item_id, quantity)
                                      VALUES (?, ?, ?, ?, ?)''', (user_db_id, today, meal_type, menu_item_id, quantity))
-                        conn.commit()
-                        reply = f"已為你登記：[{menu_item_id}] x{quantity}（{meal_type}）"
+                        # 查詢品項名稱與 code
+                        c.execute('SELECT name, code FROM menu_item WHERE id=?', (menu_item_id,))
+                        item_info = c.fetchone()
+                        if item_info:
+                            item_name, item_code = item_info
+                            reply = f"已為你登記：[{item_code}] {item_name} x{quantity}（{meal_type}）"
+                        else:
+                            reply = f"已為你登記：x{quantity}（{meal_type}）"
                 del app.pending_order[user_id]
                 conn.close()
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
