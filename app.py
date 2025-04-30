@@ -310,13 +310,20 @@ def handle_message(event):
         parts = user_message.split()
         if len(parts) == 2 and parts[1] in ["午餐", "晚餐"]:
             meal_type = parts[1]
-            c.execute("SELECT name FROM restaurant WHERE type='餐廳'")
+            c.execute("SELECT id, name FROM restaurant WHERE type='餐廳'")
             rows = c.fetchall()
             if not rows:
                 reply = "目前沒有餐廳資料。"
             else:
-                choice = random.choice(rows)[0]
-                reply = f"今天{meal_type}就決定吃：{choice}"
+                choice = random.choice(rows)
+                restaurant_id = choice[0]
+                restaurant_name = choice[1]
+                # 保存到今日餐廳表
+                meal_type_map = {"午餐": "中餐", "晚餐": "晚餐"}
+                c.execute('INSERT OR REPLACE INTO today_restaurant (date, meal_type, restaurant_id) VALUES (?, ?, ?)', 
+                         (today, meal_type_map[meal_type], restaurant_id))
+                conn.commit()
+                reply = f"今天{meal_type}就決定吃：{restaurant_name}"
         else:
             reply = "請輸入：隨便吃 午餐/晚餐"
         conn.close()
